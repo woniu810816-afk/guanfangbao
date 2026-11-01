@@ -9,13 +9,13 @@
     :root { --bg:#f5f6f8; --card:#fff; --text:#222; --primary:#3b6ef6; --danger:#e54d42; --success:#19be6b; --warn:#ff9800; --border:#eee; }
     * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
     body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; background:var(--bg); color:var(--text); padding-bottom:75px; user-select:none; }
-    .navbar { position:sticky; top:0; z-index:100; background:var(--bg); height:48px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; font-size:17px; font-weight:600; border-bottom:1px solid rgba(0,0,0,0.04); }
+    .navbar { position:sticky; top:0; z-index:100; background:var(--bg); height:48px; display:flex; align-items:center; justify-content:space-between; padding:0 14px; font-size:17px; font-weight:600; border-bottom:1px solid rgba(0,0,0,0.05); }
     .sync-badge { font-size:12px; font-weight:500; color:var(--success); background:#e6f7ed; padding:3px 8px; border-radius:12px; cursor:pointer; }
     .container { padding:12px 14px; }
     .section-title { font-size:16px; font-weight:700; margin:8px 0 10px; color:#1a1a1a; display:flex; justify-content:space-between; align-items:center; }
-    .auth-screen { position:fixed; inset:0; background:var(--bg); z-index:500; padding:24px 18px; display:flex; flex-direction:column; justify-content:center; }
+    .auth-screen { position:fixed; inset:0; background:var(--bg); z-index:500; padding:24px 18px; display:none; flex-direction:column; justify-content:center; }
     .auth-card { background:#fff; border-radius:14px; padding:22px 18px; box-shadow:0 4px 16px rgba(0,0,0,0.06); }
-    .auth-logo { width:58px; height:58px; border-radius:14px; background:var(--primary); color:#fff; font-size:26px; font-weight:700; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; }
+    .auth-logo { width:56px; height:56px; border-radius:14px; background:var(--primary); color:#fff; font-size:26px; font-weight:700; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; }
     .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
     .stat-card { background:var(--card); border-radius:10px; padding:14px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
     .stat-label { font-size:14px; color:#444; line-height:1.4; }
@@ -35,11 +35,10 @@
     .back-btn { color:#333; font-size:22px; cursor:pointer; width:50px; }
     .search-bar { background:#fff; padding:8px 12px; display:flex; gap:6px; align-items:center; border-bottom:1px solid var(--border); }
     .search-input { flex:1; background:#f5f6f8; border:1px solid #e5e5e5; border-radius:6px; padding:8px 10px; font-size:14px; outline:none; }
-    .search-btn { background:var(--primary); color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:13px; cursor:pointer; }
     .filter-bar { background:#fff; display:flex; border-bottom:1px solid var(--border); padding:8px 10px; gap:6px; }
     .filter-select { flex:1; padding:6px 4px; border:1px solid #e5e5e5; border-radius:6px; background:#fafafa; font-size:12px; }
     .sub-tabs { background:#fff; display:flex; border-bottom:1px solid var(--border); }
-    .sub-tab { flex:1; text-align:center; padding:11px 0; font-size:14px; color:#666; cursor:pointer; position:relative; }
+    .sub-tab { flex:1; text-align:center; padding:11px 0; font-size:14px; color:#666; cursor:pointer; }
     .sub-tab.active { color:var(--primary); font-weight:600; border-bottom:2px solid var(--primary); }
     .group-title { padding:10px 14px 5px; font-size:13px; color:#666; font-weight:600; }
     .cell-group { background:#fff; border-radius:10px; margin:0 12px 10px; overflow:hidden; }
@@ -50,10 +49,10 @@
     .cell-input, .cell-select { flex:1; border:none; text-align:right; font-size:14px; color:#222; background:transparent; outline:none; }
     .photo-box { padding:10px 14px; }
     .photo-list { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-    .photo-item { width:68px; height:68px; border-radius:6px; object-fit:cover; border:1px solid #eee; }
-    .photo-add { width:68px; height:68px; border:1px dashed #ccc; border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#999; font-size:11px; cursor:pointer; }
+    .photo-item { width:64px; height:64px; border-radius:6px; object-fit:cover; border:1px solid #eee; }
+    .photo-add { width:64px; height:64px; border:1px dashed #ccc; border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#999; font-size:11px; cursor:pointer; }
     .card-list { padding:10px 12px; }
-    .item-card { background:#fff; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+    .item-card { background:#fff; border-radius:10px; padding:12px 14px; margin-bottom:10px; cursor:pointer; }
     .item-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-weight:600; font-size:15px; }
     .badge { font-size:11px; padding:2px 7px; border-radius:4px; font-weight:500; }
     .badge.vacant { background:#ffeaea; color:var(--danger); }
@@ -62,27 +61,26 @@
     .item-row { font-size:13px; color:#666; margin:4px 0; display:flex; justify-content:space-between; }
     .btn { width:100%; padding:11px; border:none; border-radius:22px; background:var(--primary); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
     .btn-outline { background:#eef3fe; color:var(--primary); }
-    .btn-sm { padding:4px 9px; font-size:12px; border-radius:5px; border:none; cursor:pointer; background:#f0f2f5; color:#333; margin-left:4px; }
+    .btn-sm { padding:5px 9px; font-size:12px; border-radius:5px; border:none; cursor:pointer; background:#f0f2f5; color:#333; margin-left:4px; }
     .btn-sm.primary { background:var(--primary); color:#fff; }
     .btn-sm.danger { background:#ffeaea; color:var(--danger); }
     .btn-sm.success { background:#e6f7ed; color:var(--success); }
     .room-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px 12px; }
-    .room-cube { background:#fff; border-radius:8px; padding:10px 8px; text-align:center; border-left:4px solid var(--success); cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+    .room-cube { background:#fff; border-radius:8px; padding:10px 6px; text-align:center; border-left:4px solid var(--success); cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
     .room-cube.vacant { border-left-color:var(--danger); }
-    .room-cube.warn { border-left-color:var(--warn); }
     .tag-grid { display:flex; flex-wrap:wrap; gap:6px; padding:8px 14px; }
     .tag-chip { padding:5px 10px; border-radius:14px; font-size:12px; background:#f0f2f5; color:#555; cursor:pointer; }
     .tag-chip.on { background:var(--primary); color:#fff; }
     .dialog-mask { position:fixed; inset:0; background:rgba(0,0,0,0.48); z-index:400; display:none; align-items:center; justify-content:center; padding:20px; }
     .dialog-mask.show { display:flex; }
     .dialog-box { background:#fff; border-radius:12px; width:100%; max-width:340px; padding:18px; position:relative; max-height:85vh; overflow-y:auto; }
-    .stamp { position:absolute; right:18px; top:42px; border:2px solid var(--danger); color:var(--danger); padding:3px 10px; font-weight:700; font-size:15px; transform:rotate(-15deg); border-radius:4px; opacity:0.85; }
+    .stamp { position:absolute; right:16px; top:38px; border:2px solid var(--danger); color:var(--danger); padding:2px 8px; font-weight:700; font-size:14px; transform:rotate(-15deg); border-radius:4px; }
     .empty-tip { text-align:center; color:#999; padding:32px 0; font-size:13px; }
   </style>
 </head>
 <body>
 
-  <div id="auth-screen" class="auth-screen" style="display:none;">
+  <div id="auth-screen" class="auth-screen">
     <div class="auth-card">
       <div class="auth-logo">管</div>
       <div style="text-align:center;font-size:18px;font-weight:700;margin-bottom:6px;">管房宝</div>
@@ -92,12 +90,10 @@
   </div>
 
   <div class="navbar">
-    <span style="width:65px;font-size:12px;color:#666;" id="role-tag"></span>
+    <span style="width:72px;font-size:12px;color:#3b6ef6;font-weight:600;" id="role-tag">加载中...</span>
     <span id="app-title">管房宝</span>
     <span class="sync-badge" id="sync-status" onclick="syncFromCloud(true)">☁️ 已同步</span>
   </div>
-
-  <div id="tenant-view" class="container" style="display:none;"></div>
 
   <div id="tab-workbench" class="container">
     <div class="section-title">数据预览</div>
@@ -121,22 +117,12 @@
     </div>
   </div>
 
-  <!-- 统计与收支流水页(含功能11、12、13权限控制) -->
   <div id="tab-stats" class="container" style="display:none;"></div>
+  <div id="tab-msg" class="container" style="display:none;"><div class="section-title">待办与提醒通知</div><div id="msg-list"></div></div>
 
-  <!-- 消息通知页 -->
-  <div id="tab-msg" class="container" style="display:none;">
-    <div class="section-title">待办与提醒通知</div>
-    <div id="msg-list"></div>
-  </div>
-
-  <!-- 我的/管房组页(含功能13管家权限开关) -->
   <div id="tab-mine" class="container" style="display:none;">
     <div class="item-card" style="display:flex;justify-content:space-between;align-items:center;">
-      <div>
-        <div style="font-size:15px;font-weight:700;" id="cur-user-title">当前登录</div>
-        <div style="font-size:12px;color:#666;margin-top:3px;" id="cur-user-phone"></div>
-      </div>
+      <div><div style="font-size:15px;font-weight:700;" id="cur-user-title">当前登录</div><div style="font-size:12px;color:#666;margin-top:3px;" id="cur-user-phone"></div></div>
       <button class="btn-sm danger" onclick="logoutPhone()">退出登录</button>
     </div>
     <div class="section-title">👨‍👩‍👧 管房组（夫妻/管家权限管理）</div>
@@ -161,53 +147,43 @@
     </div>
   </div>
 
-  <!-- 二级页面弹窗 -->
   <div id="module-modal" class="modal">
-    <div class="modal-header">
-      <span class="back-btn" onclick="closeModule()">‹</span>
-      <span id="modal-title">详情</span>
-      <span style="width:50px;"></span>
-    </div>
+    <div class="modal-header"><span class="back-btn" onclick="closeModule()">‹ 返回</span><span id="modal-title">详情</span><span style="width:50px;"></span></div>
     <div id="modal-body"></div>
   </div>
 
-  <!-- 三级/四级详情弹窗(房间档案/电子合同/换房/续租) -->
   <div id="lv3-modal" class="modal modal-lv3">
-    <div class="modal-header">
-      <span class="back-btn" onclick="closeLv3()">‹</span>
-      <span id="lv3-title">详情</span>
-      <span style="width:50px;"></span>
-    </div>
+    <div class="modal-header"><span class="back-btn" onclick="closeLv3()">‹ 返回</span><span id="lv3-title">详情</span><span style="width:50px;"></span></div>
     <div id="lv3-body"></div>
   </div>
 
-  <!-- 通用居中弹窗(退租提示/电子收据凭证/部分收款) -->
-  <div id="common-dialog" class="dialog-mask">
-    <div class="dialog-box" id="common-dialog-body"></div>
-  </div>
+  <div id="common-dialog" class="dialog-mask"><div class="dialog-box" id="common-dialog-body"></div></div>
 
   <div class="tabbar" id="main-tabbar">
     <div class="tab-item active" onclick="switchTab('workbench',this)"><div class="tab-icon">❖</div>工作台</div>
     <div class="tab-item" onclick="switchTab('stats',this)"><div class="tab-icon">📈</div>统计</div>
     <div class="tab-item" onclick="switchTab('msg',this)"><div class="tab-icon">🔔</div>消息通知</div>
     <div class="tab-item" onclick="switchTab('mine',this)"><div class="tab-icon">👤</div>我的</div>
-  </div><script>
+  </div>
+
+<script>
   const GH_OWNER = 'woniu810816-afk', GH_REPO = 'guanfangbao', GH_PATH = 'db.json';
   const STORAGE_KEY = 'GFB_PRO_DATA_V3', LOGIN_PHONE_KEY = 'GFB_LOGIN_PHONE';
-  const ALL_FACILITIES = ['空调','热水器','床','衣柜','桌椅','洗衣机','冰箱','宽带','门锁钥匙'];
+  const ALL_FAC = ['空调','热水器','床','衣柜','桌椅','洗衣机','冰箱','宽带','门锁钥匙'];
 
   let currentSha = null, currentPhone = localStorage.getItem(LOGIN_PHONE_KEY) || '';
-  let roomViewMode = 'grid', contractTab = 'active';
-  let tempIdPhotos = [], tempContractPhotos = [], tempExtraFees = [], tempCoTenants = [], tempRefundList = [], tempChargeList = [];
+  let roomViewMode = 'grid', contractTab = 'active', clipCache = '';
+  let tempIdPhotos = [], tempContractPhotos = [], tempExtraFees = [], tempCoTenants = [];
 
-  let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
-    adminPhone:'', syncKey:'', restrictMgr:false, managers:[], rooms:[], pastTenants:[], bills:[], draftCheckouts:[], repairs:[], expenses:[], ledger:[], scanCount:0
+  let db = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {
+    adminPhone:'', syncKey:'', restrictMgr:false, managers:[], rooms:[], pastTenants:[], bills:[], repairs:[], expenses:[], ledger:[], scanCount:0
   };
 
   function encodeKey(r){ return btoa(r.trim().split('').reverse().join('')); }
   function decodeKey(e){ try{return atob(e).split('').reverse().join('');}catch(x){return '';} }
-  function isBoss(){ return currentPhone && currentPhone === db.adminPhone; }
+  function isBoss(){ return !db.adminPhone || (currentPhone && currentPhone === db.adminPhone); }
   function canEditCritical(){ return isBoss() || !db.restrictMgr; }
+  function copyClip(msg){ navigator.clipboard.writeText(clipCache).then(()=>alert(msg)); }
 
   function setSyncBadge(t, warn){
     const el = document.getElementById('sync-status');
@@ -216,10 +192,7 @@
 
   async function syncFromCloud(manual){
     setSyncBadge('🔄 同步中', true);
-    const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}?t=${Date.now()}`;
-    const headers = { 'Accept':'application/vnd.github.v3+json' };
-    const tk = decodeKey(db.syncKey || '');
-    if(tk) headers['Authorization'] = `token ${tk}`;
+    const url = `[https://api.github.com/repos/$](https://api.github.com/repos/$){GH_OWNER}/${GH_REPO}/contents/${GH_PATH}?t=${Date.now()}`; const headers = { 'Accept':'application/vnd.github.v3+json' }; const tk = decodeKey(db.syncKey \vert{}\vert{} ''); if(tk) headers['Authorization'] = `token ${tk}`;
     try {
       const res = await fetch(url, { headers, cache:'no-store' });
       if(res.status === 404){ renderFirstTimeSetup(); return false; }
@@ -227,14 +200,14 @@
       const data = await res.json();
       currentSha = data.sha;
       const cloud = JSON.parse(decodeURIComponent(escape(atob(data.content.replace(/\s/g,'')))));
-      db = Object.assign({managers:[],rooms:[],pastTenants:[],bills:[],draftCheckouts:[],repairs:[],expenses:[],ledger:[],restrictMgr:false}, cloud);
+      db = Object.assign({managers:[],rooms:[],pastTenants:[],bills:[],repairs:[],expenses:[],ledger:[],restrictMgr:false}, cloud);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
       setSyncBadge('☁️ 已同步', false);
-      if(manual) alert('已从云端刷新最新数据！');
+      if(manual) alert('已从云端同步最新数据！');
       verifyAccess();
       return true;
     } catch(e) {
-      setSyncBadge('⚠️ 离线', true);
+      setSyncBadge('⚠️ 本地模式', true);
       db.adminPhone ? verifyAccess() : renderFirstTimeSetup();
       return false;
     }
@@ -246,18 +219,10 @@
     const tk = decodeKey(db.syncKey || '');
     if(!tk) return;
     setSyncBadge('🔄 保存中', true);
-    const url = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`;
-    const headers = { 'Accept':'application/vnd.github.v3+json', 'Authorization':`token ${tk}`, 'Content-Type':'application/json' };
+    const url = `[https://api.github.com/repos/$](https://api.github.com/repos/$){GH_OWNER}/${GH_REPO}/contents/${GH_PATH}`; const headers = { 'Accept':'application/vnd.github.v3+json', 'Authorization':`token ${tk}`, 'Content-Type':'application/json' };
     try {
       if(!currentSha){
-        const c = await fetch(url+`?t=${Date.now()}`, {headers, cache:'no-store'});
-        if(c.ok) currentSha = (await c.json()).sha;
-      }
-      const body = { message:'sync', content:btoa(unescape(encodeURIComponent(JSON.stringify(db)))) };
-      if(currentSha) body.sha = currentSha;
-      let res = await fetch(url, { method:'PUT', headers, body:JSON.stringify(body) });
-      if(res.status === 409){
-        const r = await fetch(url+`?t=${Date.now()}`, {headers, cache:'no-store'});
+        const c = await fetch(url+`?t=${Date.now()}`, {headers, cache:'no-store'}); if(c.ok) currentSha = (await c.json()).sha; } const body = { message:'sync', content:btoa(unescape(encodeURIComponent(JSON.stringify(db)))) }; if(currentSha) body.sha = currentSha; let res = await fetch(url, { method:'PUT', headers, body:JSON.stringify(body) }); if(res.status === 409){ const r = await fetch(url+`?t=${Date.now()}`, {headers, cache:'no-store'});
         if(r.ok){ currentSha = (await r.json()).sha; body.sha = currentSha; res = await fetch(url, {method:'PUT',headers,body:JSON.stringify(body)}); }
       }
       if(res.ok){ currentSha = (await res.json()).content.sha; setSyncBadge('☁️ 已同步', false); }
@@ -267,32 +232,28 @@
   function renderFirstTimeSetup(){
     const s = document.getElementById('auth-screen'); s.style.display = 'flex';
     document.getElementById('auth-sub').innerText = '首次使用：请绑定主房东手机号并粘贴连接钥匙';
-    document.getElementById('auth-form').innerHTML = `
-      <input id="init-phone" type="tel" class="search-input" style="width:100%;margin-bottom:10px;" placeholder="1. 输入主房东手机号">
-      <input id="init-token" class="search-input" style="width:100%;margin-bottom:14px;" placeholder="2. 粘贴 ghp_ 开头的连接钥匙">
-      <button class="btn" onclick="activateCloud()">立即激活系统</button>`;
+    document.getElementById('auth-form').innerHTML = `<input id="init-phone" type="tel" class="search-input" style="width:100%;margin-bottom:10px;" value="13590174063" placeholder="1. 输入主房东手机号"><input id="init-token" class="search-input" style="width:100%;margin-bottom:14px;" placeholder="2. 粘贴 ghp_ 开头的连接钥匙"><button class="btn" onclick="activateCloud()">立即激活系统</button>`;
   }
 
   async function activateCloud(){
     const p = document.getElementById('init-phone').value.trim(), t = document.getElementById('init-token').value.trim();
-    if(!p || !t) return alert('请填写完整！');
+    if(!p || !t) return alert('请填写手机号和钥匙！');
     db.adminPhone = p; db.syncKey = encodeKey(t); currentPhone = p;
     localStorage.setItem(LOGIN_PHONE_KEY, p);
     await saveDB(); verifyAccess();
   }
 
   function verifyAccess(){
-    const ok = isBoss() || (currentPhone && (db.managers||[]).some(m => m.phone === currentPhone));
+    if(!currentPhone && db.adminPhone) currentPhone = db.adminPhone;
+    const ok = !db.adminPhone || currentPhone === db.adminPhone || (db.managers||[]).some(m => m.phone === currentPhone);
     if(ok){
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('role-tag').innerText = isBoss() ? '👑 主房东' : '👤 管房员';
       refreshDashboard(); renderManagersSection();
     } else {
       const s = document.getElementById('auth-screen'); s.style.display = 'flex';
-      document.getElementById('auth-sub').innerText = currentPhone ? '⚠️ 该手机号无管房权限' : '请输入已授权的手机号登录';
-      document.getElementById('auth-form').innerHTML = `
-        <input id="login-p" type="tel" class="search-input" style="width:100%;margin-bottom:12px;" placeholder="请输入手机号">
-        <button class="btn" onclick="doLogin()">验证手机号进入</button>`;
+      document.getElementById('auth-sub').innerText = '请输入已授权的手机号登录';
+      document.getElementById('auth-form').innerHTML = `<input id="login-p" type="tel" class="search-input" style="width:100%;margin-bottom:12px;" placeholder="请输入手机号"><button class="btn" onclick="doLogin()">验证手机号进入</button>`;
     }
   }
 
@@ -304,8 +265,7 @@
     } else alert('该手机号未开通权限，请联系主房东添加！');
   }
 
-  function logoutPhone(){ currentPhone = ''; localStorage.removeItem(LOGIN_PHONE_KEY); verifyAccess(); }
-
+  function logoutPhone(){ currentPhone = ''; localStorage.removeItem(LOGIN_PHONE_KEY); renderFirstTimeSetup(); }
   function closeDialog(){ document.getElementById('common-dialog').classList.remove('show'); }
   function closeModule(){ document.getElementById('module-modal').classList.remove('show'); refreshDashboard(); }
   function closeLv3(){ document.getElementById('lv3-modal').classList.remove('show'); }
@@ -316,11 +276,10 @@
     db.rooms.filter(r => r.status === 'rented').forEach(r => {
       if(r.endDate){ const d = (new Date(r.endDate) - today)/(1000*3600*24); if(d <= 30 && d >= -30) exp++; }
     });
-    const due = db.bills.filter(b => b.status !== 'paid').length;
     document.getElementById('st-total').innerText = total;
     document.getElementById('st-vacant').innerText = vacant;
     document.getElementById('st-expiring').innerText = exp;
-    document.getElementById('st-due').innerText = due;
+    document.getElementById('st-due').innerText = db.bills.filter(b => b.status !== 'paid').length;
 
     let msgs = [];
     db.bills.filter(b => b.status !== 'paid').forEach(b => {
@@ -328,150 +287,44 @@
       msgs.push(`<div class="item-card" onclick="openModule('bills')"><div class="item-header"><span>💰 ${b.roomName} (${b.tenant})</span><span class="badge vacant">待收 ¥${rem}</span></div><div class="item-row"><span>${b.detail}</span><span>${b.month}</span></div></div>`);
     });
     db.repairs.filter(r => r.status === 'pending').forEach(r => {
-      msgs.push(`<div class="item-card" onclick="openModule('repairs')"><div class="item-header"><span>🛠️ [${r.type}] ${r.roomName}</span><span class="badge warn">待维修</span></div><div class="item-row"><span>${r.desc}</span><span>${r.date}</span></div></div>`);
+      msgs.push(`<div class="item-card" onclick="openModule('repairs')"><div class="item-header"><span>🛠️ [${r.type}]${r.roomName}</span><span class="badge warn">待维修</span></div><div class="item-row"><span>${r.desc}</span><span>${r.date}</span></div></div>`);
     });
     document.getElementById('msg-list').innerHTML = msgs.length ? msgs.join('') : '<div class="empty-tip">暂无待办提醒</div>';
     renderStatsTab();
   }
 
-  // 功能11、12、13：统计、日常支出记账、净利润与三级流水账
   function renderStatsTab(){
     const box = document.getElementById('tab-stats');
-    if(!canEditCritical()){
-      box.innerHTML = `<div class="empty-tip">🔒 主房东已开启权限保护，管房员无权查看总财务报表</div>`;
-      return;
-    }
+    if(!canEditCritical()){ box.innerHTML = '<div class="empty-tip">🔒 主房东已开启权限保护，管房员无权查看总财务报表</div>'; return; }
     const income = (db.ledger||[]).filter(l => l.type==='in').reduce((s,l)=>s+Number(l.amount),0);
     const expense = (db.expenses||[]).reduce((s,e)=>s+Number(e.amount),0);
-    const net = income - expense;
     const unpaid = db.bills.filter(b => b.status!=='paid').reduce((s,b)=>s+(Number(b.total)-Number(b.paidAmount||0)-Number(b.discount||0)),0);
     const dep = db.rooms.filter(r => r.status==='rented').reduce((s,r)=>s+Number(r.deposit||0),0);
-
-    const ledgerHtml = (db.ledger||[]).slice(0,30).map(l => `
-      <div class="cell-row" style="font-size:13px;">
-        <div><strong>${l.title}</strong><div style="color:#888;font-size:11px;">${l.date} | ${l.way||'微信'} | 经手:${l.op||'房东'}</div></div>
-        <strong style="color:${l.type==='in'?'var(--success)':'var(--danger)'}">${l.type==='in'?'+':'-'}¥${Number(l.amount).toFixed(2)}</strong>
-      </div>`).join('');
-
-    box.innerHTML = `
-      <div class="section-title">经营财务与净利润核算 (功能11)</div>
-      <div class="item-card">
-        <div class="item-row"><span>累计实收总额</span><strong style="color:var(--success);font-size:17px;">¥${income.toFixed(2)}</strong></div>
-        <div class="item-row"><span>房屋日常总支出</span><strong style="color:var(--danger);font-size:16px;">-¥${expense.toFixed(2)}</strong></div>
-        <div class="item-row" style="border-top:1px dashed #eee;padding-top:6px;"><span><strong>真实净利润 (实收-支出)</strong></span><strong style="color:var(--primary);font-size:18px;">¥${net.toFixed(2)}</strong></div>
-        <div class="item-row"><span>待收欠租总额：¥${unpaid.toFixed(2)}</span><span>在押押金：¥${dep.toFixed(2)}</span></div>
-        <button class="btn btn-outline" style="margin-top:8px;" onclick="addExpensePrompt()">+ 记一笔房屋支出 (维修/保洁/宽带/物业)</button>
-      </div>
-      <div class="section-title">收支流水三级明细账 (功能12)</div>
-      <div class="cell-group" style="margin:0;">${ledgerHtml || '<div class="empty-tip">暂无收支流水记录</div>'}</div>`;
-  }
-
-  function addExpensePrompt(){
-    const cat = prompt('请输入支出类型（如：维修费、保洁费、宽带费、采购家电）：','维修费');
-    if(!cat) return;
-    const amt = Number(prompt(`请输入【${cat}】支出金额（元）：`,'100')||0);
-    if(!amt) return;
-    const note = prompt('备注说明（如：302室换水龙头）：','') || '';
+    const ledgerHtml = (db.ledger||[]).slice(0,30).map(l => `<div class="cell-row" style="font-size:13px;"><div><strong>${l.title}</strong><div style="color:#888;font-size:11px;">${l.date} | ${l.way\vert{}\vert{}'微信'} \vert{} 经手:${l.op||'房东'}</div></div><strong style="color:${l.type==='in'?'var(--success)':'var(--danger)'}">${l.type==='in'?'+':'-'}¥${Number(l.amount).toFixed(2)}</strong></div>`).join('');
+    box.innerHTML = `<div class="section-title">经营财务与净利润核算</div><div class="item-card"><div class="item-row"><span>累计实收总额</span><strong style="color:var(--success);font-size:17px;">¥${income.toFixed(2)}</strong></div><div class="item-row"><span>房屋日常总支出</span><strong style="color:var(--danger);font-size:16px;">-¥${expense.toFixed(2)}</strong></div><div class="item-row" style="border-top:1px dashed #eee;padding-top:6px;"><span><strong>真实净利润 (实收-支出)</strong></span><strong style="color:var(--primary);font-size:18px;">¥${(income-expense).toFixed(2)}</strong></div><div class="item-row"><span>待收欠租：¥${unpaid.toFixed(2)}</span><span>在押押金：¥${dep.toFixed(2)}</span></div><button class="btn btn-outline" style="margin-top:8px;" onclick="addExpensePrompt()">+ 记一笔房屋支出 (维修/保洁/宽带/物业)</button></div><div class="section-title">收支流水三级明细账</div><div class="cell-group" style="margin:0;">${ledgerHtml \vert{}\vert{} '<div class="empty-tip">暂无收支流水记录</div>'}</div>`; }  function addExpensePrompt(){ const cat = prompt('支出类型（如：维修费、保洁费、宽带费）：','维修费'); if(!cat) return; const amt = Number(prompt(`【${cat}】支出金额（元）：`,'100')||0); if(!amt) return;
+    const note = prompt('备注说明（如：302换水龙头）：','') || '';
     const date = new Date().toISOString().slice(0,10);
-    db.expenses = db.expenses || [];
     db.expenses.unshift({ cat, amount:amt, note, date });
-    db.ledger = db.ledger || [];
-    db.ledger.unshift({ type:'out', title:`[支出] ${cat} ${note}`, amount:amt, way:'支出记账', op:currentPhone, date });
+    db.ledger.unshift({ type:'out', title:`[支出] ${cat}${note}`, amount:amt, way:'支出记账', op:currentPhone, date });
     saveDB();
   }
 
-  // 功能1、2、3：我的房源（整栋批量建房 + 方格房态图 + 三级房间档案）
   function openModule(type){
-    const modal = document.getElementById('module-modal'), title = document.getElementById('modal-title'), body = document.getElementById('modal-body');
-    modal.classList.add('show');
-
+    document.getElementById('module-modal').classList.add('show');
+    const title = document.getElementById('modal-title'), body = document.getElementById('modal-body');
     if(type === 'rooms'){
       title.innerText = '我的房源';
-      const itemsHtml = roomViewMode === 'grid' ? `<div class="room-grid">${db.rooms.map((r,i) => `
-        <div class="room-cube ${r.status}" onclick="openRoomLv3(${i})">
-          <div style="font-size:11px;color:#888;">${r.building||'默认'}</div>
-          <div style="font-weight:700;font-size:15px;margin:3px 0;">${r.name}</div>
-          <div style="font-size:12px;color:${r.status==='vacant'?'var(--danger)':'var(--success)'}">${r.status==='vacant'?'空房 ¥'+r.rent:r.tenant}</div>
-        </div>`).join('')}</div>` : `<div class="card-list">${db.rooms.map((r,i) => `
-        <div class="item-card" onclick="openRoomLv3(${i})">
-          <div class="item-header"><span>${r.building||'默认'} - ${r.name}</span><span class="badge ${r.status}">${r.status==='vacant'?'空房':'已租'}</span></div>
-          <div class="item-row"><span>租金:¥${r.rent}/月 | 水底:${r.lastWater||0} 电底:${r.lastElec||0}</span><span>点此看三级档案 ›</span></div>
-        </div>`).join('')}</div>`;
-
-      body.innerHTML = `
-        <div class="sub-tabs">
-          <div class="sub-tab ${roomViewMode==='grid'?'active':''}" onclick="roomViewMode='grid';openModule('rooms')">🔲 楼层方格房态图</div>
-          <div class="sub-tab ${roomViewMode==='list'?'active':''}" onclick="roomViewMode='list';openModule('rooms')">📋 列表视图</div>
-        </div>
-        <div style="padding:10px 12px;display:flex;gap:8px;">
-          <button class="btn" style="flex:1" onclick="showAddSingleRoom()">+ 单间建房</button>
-          <button class="btn btn-outline" style="flex:1" onclick="showBulkCreateRooms()">⚡ 整栋批量建房</button>
-        </div>
-        ${db.rooms.length ? itemsHtml : '<div class="empty-tip">暂无房源，可点击上方“整栋批量建房”1秒生成</div>'}`;
-    }
-    else if(type === 'sign') renderSignPage();
-    else if(type === 'contracts') renderContractsPage();
-    else if(type === 'recruit') renderRecruitPage();
-    else if(type === 'bills') renderBillsPage();
-    else if(type === 'checkout') renderCheckoutHome();
-    else if(type === 'repairs') renderRepairsPage();
+      const itemsHtml = roomViewMode === 'grid' ? `<div class="room-grid">${db.rooms.map((r,i) => `<div class="room-cube ${r.status}" onclick="openRoomLv3(${i})"><div style="font-size:11px;color:#888;">${r.building||'默认'}</div><div style="font-weight:700;font-size:15px;margin:3px 0;">${r.name}</div><div style="font-size:12px;color:${r.status==='vacant'?'var(--danger)':'var(--success)'}">${r.status==='vacant'?'空房 ¥'+r.rent:r.tenant}</div></div>`).join('')}</div>` : `<div class="card-list">${db.rooms.map((r,i) => `<div class="item-card" onclick="openRoomLv3(${i})"><div class="item-header"><span>${r.building||'默认'} - ${r.name}</span><span class="badge ${r.status}">${r.status==='vacant'?'空房':'已租'}</span></div><div class="item-row"><span>租金:¥${r.rent}/月 | 水底:${r.lastWater||0} 电底:${r.lastElec||0}</span><span>档案 ›</span></div></div>`).join('')}</div>`;
+      body.innerHTML = `<div class="sub-tabs"><div class="sub-tab ${roomViewMode==='grid'?'active':''}" onclick="roomViewMode='grid';openModule('rooms')">🔲 楼层方格房态图</div><div class="sub-tab ${roomViewMode==='list'?'active':''}" onclick="roomViewMode='list';openModule('rooms')">📋 列表视图</div></div><div style="padding:10px 12px;display:flex;gap:8px;"><button class="btn" style="flex:1" onclick="showAddSingleRoom()">+ 单间建房</button><button class="btn btn-outline" style="flex:1" onclick="showBulkCreateRooms()">⚡ 整栋批量建房</button></div>${db.rooms.length ? itemsHtml : '<div class="empty-tip">暂无房源，请点击上方按钮创建</div>'}`; } else if(type === 'sign') renderSignPage(); else if(type === 'contracts') renderContractsPage(); else if(type === 'recruit') renderRecruitPage(); else if(type === 'bills') renderBillsPage(); else if(type === 'checkout') renderCheckoutHome(); else if(type === 'repairs') renderRepairsPage(); }  function showAddSingleRoom(){ const bldg = prompt('请输入楼栋名称：','A栋') \vert{}\vert{} 'A栋'; const name = prompt('请输入房间号（如 302）：'); if(!name) return; const rent = Number(prompt('预设月租金（元）：','1500')\vert{}\vert{}1500); db.rooms.push({ id:'RM_'+Date.now(), building:bldg, name, rent, waterPrice:5, elecPrice:1, lastWater:0, lastElec:0, facilities:['空调','热水器','床','门锁钥匙'], status:'vacant' }); saveDB(); openModule('rooms'); }  function showBulkCreateRooms(){ const bldg = prompt('1. 楼栋名称（如：A栋）：','A栋'); if(!bldg) return; const floors = Number(prompt('2. 总楼层数（如 5）：','5')\vert{}\vert{}0); const perFloor = Number(prompt('3. 每层房间数（如 6）：','6')\vert{}\vert{}0); const rent = Number(prompt('4. 统一月租金（元）：','1200')\vert{}\vert{}1200); if(!floors \vert{}\vert{} !perFloor) return; for(let f=1; f<=floors; f++) for(let r=1; r<=perFloor; r++) db.rooms.push({ id:'RM_'+Date.now()+'_'+f+'_'+r, building:bldg, name:`${f}0${r}`, rent, waterPrice:5, elecPrice:1, lastWater:0, lastElec:0, facilities:['空调','热水器','床','桌椅','门锁钥匙'], status:'vacant' }); saveDB(); openModule('rooms'); alert(`🎉 已批量生成 ${floors*perFloor} 间房源！`);
   }
 
-  function showAddSingleRoom(){
-    const bldg = prompt('请输入楼栋名称：','A栋') || '默认楼栋';
-    const name = prompt('请输入房间号（如 302）：'); if(!name) return;
-    const rent = Number(prompt('预设月租金（元）：','1500')||1500);
-    db.rooms.push({ id:'RM_'+Date.now(), building:bldg, name, rent, waterPrice:5, elecPrice:1, lastWater:0, lastElec:0, facilities:['空调','热水器','床','门锁钥匙'], status:'vacant' });
-    saveDB(); openModule('rooms');
-  }
-
-  // 功能1：整栋批量建房
-  function showBulkCreateRooms(){
-    const bldg = prompt('1. 请输入楼栋名称（如：阳光公寓A栋）：','A栋'); if(!bldg) return;
-    const floors = Number(prompt('2. 请输入总楼层数（如共5层填 5）：','5')||0);
-    const perFloor = Number(prompt('3. 请输入每层房间数（如每层6间填 6）：','6')||0);
-    const rent = Number(prompt('4. 统一预设月租金（元）：','1200')||1200);
-    if(!floors || !perFloor) return;
-    for(let f=1; f<=floors; f++){
-      for(let r=1; r<=perFloor; r++){
-        const rmNo = `${f}0${r}`;
-        db.rooms.push({ id:'RM_'+Date.now()+'_'+f+'_'+r, building:bldg, name:rmNo, rent, waterPrice:5, elecPrice:1, lastWater:0, lastElec:0, facilities:['空调','热水器','床','桌椅','门锁钥匙'], status:'vacant' });
-      }
-    }
-    saveDB(); openModule('rooms');
-    alert(`🎉 已为您批量生成 ${floors*perFloor} 间房源！`);
-  }
-
-  // 功能2、6：房间三级档案（水电底数+家私家电配置+快捷换房/续租）
   function openRoomLv3(idx){
     const r = db.rooms[idx]; if(!r) return;
-    const m = document.getElementById('lv3-modal'); m.classList.add('show');
-    document.getElementById('lv3-title').innerText = `${r.building}-${r.name} 三级档案`;
+    document.getElementById('lv3-modal').classList.add('show');
+    document.getElementById('lv3-title').innerText = `${r.building}-${r.name} 房间档案`;
     const fac = r.facilities || [];
-    const chips = ALL_FACILITIES.map(f => `<span class="tag-chip ${fac.includes(f)?'on':''}" onclick="toggleRoomFac(${idx},'${f}')">${f}</span>`).join('');
-
-    document.getElementById('lv3-body').innerHTML = `
-      <div class="group-title">房间基础与水电表底数 (功能2/4)</div>
-      <div class="cell-group">
-        <div class="cell-row"><span class="cell-label">房间状态</span><span class="badge ${r.status}">${r.status==='vacant'?'空置可租':'在租: '+r.tenant}</span></div>
-        <div class="cell-row"><span class="cell-label">月标准租金</span><input id="lv3-rent" type="number" class="cell-input" value="${r.rent}"></div>
-        <div class="cell-row"><span class="cell-label">水费单价(元/方)</span><input id="lv3-wp" type="number" class="cell-input" value="${r.waterPrice||5}"></div>
-        <div class="cell-row"><span class="cell-label">电费单价(元/度)</span><input id="lv3-ep" type="number" class="cell-input" value="${r.elecPrice||1}"></div>
-        <div class="cell-row"><span class="cell-label">当前水表底数(方)</span><input id="lv3-lw" type="number" class="cell-input" value="${r.lastWater||0}"></div>
-        <div class="cell-row"><span class="cell-label">当前电表底数(度)</span><input id="lv3-le" type="number" class="cell-input" value="${r.lastElec||0}"></div>
-      </div>
-      <div class="group-title">屋内家私家电与钥匙清单 (点击勾选)</div>
-      <div class="cell-group"><div class="tag-grid">${chips}</div></div>
-      <div style="padding:12px;display:flex;flex-direction:column;gap:8px;">
-        <button class="btn" onclick="saveRoomLv3(${idx})">💾 保存房间三级档案</button>
-        ${r.status==='rented' ? `
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-outline" onclick="renewRoomContract(${idx})">🔄 一键续租</button>
-            <button class="btn btn-outline" onclick="swapRoomContract(${idx})">🔁 中途换房</button>
-            <button class="btn btn-outline" onclick="openElecContract(${idx})">📜 电子合同</button>
-          </div>` : ''}
-        ${canEditCritical() ? `<button class="btn" style="background:#ffeaea;color:var(--danger)" onclick="if(confirm('确定删除该房源？')){db.rooms.splice(${idx},1);saveDB();closeLv3();openModule('rooms');}">删除此房源</button>` : ''}
-      </div>`;
+    const chips = ALL_FAC.map(f => `<span class="tag-chip ${fac.includes(f)?'on':''}" onclick="toggleRoomFac(${idx},'${f}')">${f}</span>`).join('');
+    document.getElementById('lv3-body').innerHTML = `<div class="group-title">基础价格与水电表底数</div><div class="cell-group"><div class="cell-row"><span class="cell-label">房间状态</span><span class="badge ${r.status}">${r.status==='vacant'?'空置':'在租: '+r.tenant}</span></div><div class="cell-row"><span class="cell-label">月标准租金</span><input id="lv3-rent" type="number" class="cell-input" value="${r.rent}"></div><div class="cell-row"><span class="cell-label">水费单价(元/方)</span><input id="lv3-wp" type="number" class="cell-input" value="${r.waterPrice||5}"></div><div class="cell-row"><span class="cell-label">电费单价(元/度)</span><input id="lv3-ep" type="number" class="cell-input" value="${r.elecPrice||1}"></div><div class="cell-row"><span class="cell-label">当前水表底数</span><input id="lv3-lw" type="number" class="cell-input" value="${r.lastWater||0}"></div><div class="cell-row"><span class="cell-label">当前电表底数</span><input id="lv3-le" type="number" class="cell-input" value="${r.lastElec||0}"></div></div><div class="group-title">屋内家私家电与钥匙清单 (点击勾选)</div><div class="cell-group"><div class="tag-grid">${chips}</div></div><div style="padding:12px;display:flex;flex-direction:column;gap:8px;"><button class="btn" onclick="saveRoomLv3(${idx})">💾 保存房间档案</button>${r.status==='rented'?`<div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="renewRoomContract(${idx})">🔄 续租</button><button class="btn btn-outline" onclick="swapRoomContract(${idx})">🔁 换房</button><button class="btn btn-outline" onclick="openElecContract(${idx})">📜 合同</button></div>`:''}${canEditCritical()?`<button class="btn" style="background:#ffeaea;color:var(--danger)" onclick="if(confirm('确定删除该房源？')){db.rooms.splice(${idx},1);saveDB();closeLv3();openModule('rooms');}">删除此房源</button>`:''}</div>`;
   }
 
   function toggleRoomFac(idx, item){
@@ -491,170 +344,21 @@
     saveDB(); closeLv3(); openModule('rooms');
   }
 
-  // 功能6：一键续租与中途换房
   function renewRoomContract(idx){
     const r = db.rooms[idx];
-    const newEnd = prompt(`当前到期日为 ${r.endDate}，请输入续租后的新到期日期 (YYYY-MM-DD)：`, r.endDate);
-    if(!newEnd) return;
-    const newRent = Number(prompt('请输入续租后的新月租金（元）：', r.rent)||r.rent);
-    r.endDate = newEnd; r.rent = newRent;
-    saveDB(); openRoomLv3(idx); alert('✅ 续租成功！合同期及租金已更新。');
-  }
-
-  function swapRoomContract(idx){
-    const oldRm = db.rooms[idx];
-    const vacants = db.rooms.filter(x => x.status === 'vacant');
-    if(!vacants.length) return alert('当前没有其他空房可供换房！');
-    const targetName = prompt(`请输入要换入的空房号（可选：${vacants.map(v=>v.name).join(' / ')}）：`, vacants[0].name);
-    const newRm = vacants.find(v => v.name === targetName);
-    if(!newRm) return alert('未找到该空房号！');
-    const fields = ['tenant','phone','idCard','idAddr','emergency','coTenants','startDate','endDate','cycle','billCycle','payDay','deposit','extraFees','idPhotos','contractPhotos'];
-    fields.forEach(k => { newRm[k] = oldRm[k]; delete oldRm[k]; });
+    const newEnd = prompt(`原到期日 ${r.endDate}，请输入续租新到期日 (YYYY-MM-DD)：`, r.endDate); if(!newEnd) return; r.endDate = newEnd; r.rent = Number(prompt('续租新月租金（元）：', r.rent)\vert{}\vert{}r.rent); saveDB(); openRoomLv3(idx); alert('✅ 续租成功！'); }  function swapRoomContract(idx){ const oldRm = db.rooms[idx], vacants = db.rooms.filter(x => x.status === 'vacant'); if(!vacants.length) return alert('当前无空房可换！'); const tName = prompt(`输入要换入的空房号（可选：${vacants.map(v=>v.name).join('/')}）：`, vacants[0].name);
+    const newRm = vacants.find(v => v.name === tName); if(!newRm) return alert('未找到该空房！');
+    ['tenant','phone','idCard','emergency','coTenants','startDate','endDate','cycle','payDay','deposit','extraFees','idPhotos','contractPhotos'].forEach(k => { newRm[k] = oldRm[k]; delete oldRm[k]; });
     newRm.status = 'rented'; oldRm.status = 'vacant';
-    saveDB(); closeLv3(); openModule('rooms');
-    alert(`✅ 已将租客【${newRm.tenant}】及押金平移换房至【${newRm.building}-${newRm.name}】！`);
+    saveDB(); closeLv3(); openModule('rooms'); alert(`✅ 已换房至 ${newRm.name}！`); }  function openElecContract(idx){ const r = db.rooms[idx]; clipCache = `《房屋租赁电子合同》\n出租方：${db.adminPhone}\n承租方：${r.tenant}（电话：${r.phone}，身份证：${r.idCard\vert{}\vert{}'已核验'}）\n紧急联系人：${r.emergency||'无'} | 同住人：${(r.coTenants\vert{}\vert{}[]).join('、')\vert{}\vert{}'无'}\n1. 租赁房屋：${r.building}-${r.name}\n2. 合同期限：${r.startDate} 至 ${r.endDate}（${r.cycle||'月付'}，每月${r.payDay\vert{}\vert{}1}号交租）\n3. 租金押金：月租 ¥${r.rent}，押金 ¥${r.deposit\vert{}\vert{}0}\n4. 水电底数：水 ¥${r.waterPrice}/方(底数${r.lastWater\vert{}\vert{}0})，电 ¥${r.elecPrice}/度(底数${r.lastElec\vert{}\vert{}0})\n5. 屋内配置：${(r.facilities||[]).join('、')||'标准配置'}`;
+    document.getElementById('common-dialog').classList.add('show');
+    document.getElementById('common-dialog-body').innerHTML = `<div style="font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;">📜 房屋租赁电子合同</div><pre style="white-space:pre-wrap;font-size:12px;background:#f8f9fb;padding:10px;border-radius:8px;line-height:1.6;margin-bottom:12px;">${clipCache}</pre><div style="display:flex;gap:8px;"><button class="btn btn-outline" onclick="closeDialog()">关闭</button><button class="btn" onclick="copyClip('电子合同全文已复制！')">📋 复制合同</button></div>`;
   }
 
-  // 功能7：四级标准电子合同生成
-  function openElecContract(idx){
-    const r = db.rooms[idx];
-    const text = `《房屋租赁电子合同》\n\n出租方（甲方）：房东 (${db.adminPhone})\n承租方（乙方）：${r.tenant}（电话：${r.phone}，身份证：${r.idCard||'已核验'}）\n紧急联系人：${r.emergency||'无'} | 同住人：${(r.coTenants||[]).join('、')||'无'}\n\n第一条 租赁房屋：${r.building} ${r.name}\n第二条 租赁期限：${r.startDate} 至 ${r.endDate}（${r.cycle||'月付'}，每月${r.payDay||1}号交租）\n第三条 租金与押金：月租金 ¥${r.rent} 元，押金 ¥${r.deposit||0} 元。\n第四条 水电及底数：水费 ¥${r.waterPrice}/方（入住底数 ${r.lastWater||0}方），电费 ¥${r.elecPrice}/度（入住底数 ${r.lastElec||0}度）。\n第五条 屋内设施配置：${(r.facilities||[]).join('、')||'标准配置'}（退租验收以此为准）。\n\n甲方签章：已确认    乙方签字：${r.tenant}\n签约日期：${r.startDate}`;
-    const d = document.getElementById('common-dialog'); d.classList.add('show');
-    document.getElementById('common-dialog-body').innerHTML = `
-      <div style="font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;">📜 房屋租赁电子合同</div>
-      <pre style="white-space:pre-wrap;font-size:12px;background:#f8f9fb;padding:10px;border-radius:8px;line-height:1.6;margin-bottom:12px;">${text}</pre>
-      <div style="display:flex;gap:8px;">
-        <button class="btn btn-outline" onclick="closeDialog()">关闭</button>
-        <button class="btn" onclick="navigator.clipboard.writeText(\`${text}\`);alert('电子合同全文已复制，可直接发给租客微信确认！')">📋 复制合同发给租客</button>
-      </div>`;
-  }
-
-  // 功能4、5：租客签约（含水电底数、同住人、紧急联系人、自定义费用、照片上传）
   function renderSignPage(){
     document.getElementById('modal-title').innerText = '租客签约';
     const vacants = db.rooms.filter(r => r.status === 'vacant');
-    if(!vacants.length){ document.getElementById('modal-body').innerHTML = '<div class="empty-tip">暂无空房可签约，请先添加房源</div>'; return; }
+    if(!vacants.length){ document.getElementById('modal-body').innerHTML = '<div class="empty-tip">暂无空房可签约，请先在“我的房源”中添加房源</div>'; return; }
     tempIdPhotos = []; tempContractPhotos = []; tempExtraFees = []; tempCoTenants = [];
     const f = vacants[0], today = new Date().toISOString().slice(0,10), nextY = new Date(new Date().setFullYear(new Date().getFullYear()+1)).toISOString().slice(0,10);
-
-    document.getElementById('modal-body').innerHTML = `
-      <div class="group-title">录入租客与同住人信息 (功能5)</div>
-      <div class="cell-group">
-        <div class="cell-row"><span class="cell-label">租客姓名<span class="req">*</span></span><input id="s-tenant" class="cell-input" placeholder="请填写"></div>
-        <div class="cell-row"><span class="cell-label">手机号<span class="req">*</span></span><input id="s-phone" type="tel" class="cell-input" placeholder="请填写"></div>
-        <div class="cell-row"><span class="cell-label">身份证号</span><input id="s-idcard" class="cell-input" placeholder="请填写"></div>
-        <div class="cell-row"><span class="cell-label">紧急联系人</span><input id="s-emerg" class="cell-input" placeholder="姓名及电话"></div>
-        <div id="co-tenant-box"></div>
-        <div class="cell-row" style="justify-content:flex-end;"><span style="color:var(--primary);font-size:13px;cursor:pointer;" onclick="addCoTenant()">+ 添加同住人登记</span></div>
-        <div class="photo-box">
-          <div style="font-size:13px;">上传身份证照片 (最多2张)</div>
-          <div class="photo-list" id="id-photo-list"><label class="photo-add">+ 照片<input type="file" accept="image/*" style="display:none" onchange="uploadImg(event,'id')"></label></div>
-        </div>
-      </div>
-      <div class="group-title">合同、费用与水电底数 (功能4)</div>
-      <div class="cell-group">
-        <div class="cell-row"><span class="cell-label">所租房间<span class="req">*</span></span><select id="s-room" class="cell-select" onchange="syncSignRoom()">${vacants.map(r=>`<option value="${r.id}">${r.building}-${r.name}</option>`).join('')}</select></div>
-        <div class="cell-row"><span class="cell-label">起租日期<span class="req">*</span></span><input id="s-start" type="date" class="cell-input" value="${today}"></div>
-        <div class="cell-row"><span class="cell-label">结束日期<span class="req">*</span></span><input id="s-end" type="date" class="cell-input" value="${nextY}"></div>
-        <div class="cell-row"><span class="cell-label">收租周期</span><select id="s-cycle" class="cell-select"><option>月付 (每月收一次)</option><option>季付</option><option>半年付</option><option>年付</option></select></div>
-        <div class="cell-row"><span class="cell-label">每月收租日</span><input id="s-payday" type="number" class="cell-input" value="1"></div>
-        <div class="cell-row"><span class="cell-label">租金(元/月)<span class="req">*</span></span><input id="s-rent" type="number" class="cell-input" value="${f.rent}"></div>
-        <div class="cell-row"><span class="cell-label">押金(元)<span class="req">*</span></span><input id="s-dep" type="number" class="cell-input" value="${f.rent}"></div>
-        <div class="cell-row"><span class="cell-label">水单价(元/方)</span><input id="s-water" type="number" class="cell-input" value="${f.waterPrice||5}"></div>
-        <div class="cell-row"><span class="cell-label">电单价(元/度)</span><input id="s-elec" type="number" class="cell-input" value="${f.elecPrice||1}"></div>
-        <div class="cell-row"><span class="cell-label">入住水表底数</span><input id="s-lw" type="number" class="cell-input" value="${f.lastWater||0}"></div>
-        <div class="cell-row"><span class="cell-label">入住电表底数</span><input id="s-le" type="number" class="cell-input" value="${f.lastElec||0}"></div>
-        <div id="extra-fee-box"></div>
-        <div class="cell-row" style="justify-content:flex-end;"><span style="color:var(--primary);font-size:13px;cursor:pointer;" onclick="addExtraFee()">+ 添加/删除固定杂费(网费/物业费)</span></div>
-        <div class="photo-box">
-          <div style="font-size:13px;">上传合同照片 (最多4张)</div>
-          <div class="photo-list" id="contract-photo-list"><label class="photo-add">+ 照片<input type="file" accept="image/*" style="display:none" onchange="uploadImg(event,'contract')"></label></div>
-        </div>
-      </div>
-      <div style="padding:12px;"><button class="btn" onclick="submitSign()">确认签约并生成首期账单</button></div>`;
-  }
-
-  function syncSignRoom(){
-    const rm = db.rooms.find(r => r.id === document.getElementById('s-room').value);
-    if(rm){
-      document.getElementById('s-rent').value = rm.rent; document.getElementById('s-dep').value = rm.rent;
-      document.getElementById('s-water').value = rm.waterPrice||5; document.getElementById('s-elec').value = rm.elecPrice||1;
-      document.getElementById('s-lw').value = rm.lastWater||0; document.getElementById('s-le').value = rm.lastElec||0;
-    }
-  }
-
-  function addCoTenant(){
-    const info = prompt('请输入同住人姓名及电话（如：李四 139xxxx）：');
-    if(info){ tempCoTenants.push(info); document.getElementById('co-tenant-box').innerHTML = tempCoTenants.map(c=>`<div class="cell-row" style="font-size:12px;color:#666;"><span>同住人：${c}</span></div>`).join(''); }
-  }
-
-  function addExtraFee(){
-    const n = prompt('费用名称（如：网费、物业费、垃圾费）：'); if(!n) return;
-    const a = Number(prompt(`【${n}】每月金额（元）：`,'30')||0);
-    tempExtraFees.push({name:n, amount:a});
-    document.getElementById('extra-fee-box').innerHTML = tempExtraFees.map((f,i)=>`<div class="cell-row"><span>${f.name}</span><span>¥${f.amount}/月 <button class="btn-sm danger" onclick="tempExtraFees.splice(${i},1)">删</button></span></div>`).join('');
-  }
-
-  function uploadImg(e, t){
-    const file = e.target.files[0]; if(!file) return;
-    const arr = t==='id' ? tempIdPhotos : tempContractPhotos;
-    if(arr.length >= (t==='id'?2:4)) return alert('照片数量已达上限');
-    const rd = new FileReader();
-    rd.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        const cv = document.createElement('canvas'), sc = Math.min(1, 480/img.width);
-        cv.width = img.width*sc; cv.height = img.height*sc;
-        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-        arr.push(cv.toDataURL('image/jpeg',0.6));
-        document.getElementById(t==='id'?'id-photo-list':'contract-photo-list').innerHTML = arr.map(s=>`<img src="${s}" class="photo-item">`).join('') + `<label class="photo-add">+ 照片<input type="file" accept="image/*" style="display:none" onchange="uploadImg(event,'${t}')"></label>`;
-      };
-      img.src = ev.target.result;
-    };
-    rd.readAsDataURL(file);
-  }
-
-  function submitSign(){
-    const tenant = document.getElementById('s-tenant').value.trim(), phone = document.getElementById('s-phone').value.trim();
-    if(!tenant || !phone) return alert('请填写租客姓名与手机号！');
-    const rm = db.rooms.find(r => r.id === document.getElementById('s-room').value);
-    rm.status = 'rented'; rm.tenant = tenant; rm.phone = phone;
-    rm.idCard = document.getElementById('s-idcard').value.trim();
-    rm.emergency = document.getElementById('s-emerg').value.trim();
-    rm.coTenants = [...tempCoTenants];
-    rm.startDate = document.getElementById('s-start').value; rm.endDate = document.getElementById('s-end').value;
-    rm.cycle = document.getElementById('s-cycle').value; rm.payDay = document.getElementById('s-payday').value;
-    rm.rent = Number(document.getElementById('s-rent').value); rm.deposit = Number(document.getElementById('s-dep').value);
-    rm.waterPrice = Number(document.getElementById('s-water').value); rm.elecPrice = Number(document.getElementById('s-elec').value);
-    rm.lastWater = Number(document.getElementById('s-lw').value||0); rm.lastElec = Number(document.getElementById('s-le').value||0);
-    rm.extraFees = [...tempExtraFees]; rm.idPhotos = [...tempIdPhotos]; rm.contractPhotos = [...tempContractPhotos];
-
-    const exSum = rm.extraFees.reduce((s,f)=>s+f.amount,0);
-    db.bills.unshift({
-      id:'BL_'+Date.now(), roomId:rm.id, building:rm.building, roomName:`${rm.building}-${rm.name}`,
-      tenant:rm.tenant, month:rm.startDate.slice(0,7), total:(rm.rent+exSum).toFixed(2), paidAmount:0, discount:0,
-      detail:`租金¥${rm.rent}`+(exSum?`+杂费¥${exSum}`:'')+' (待抄水电)', status:'unmetered', date:rm.startDate
-    });
-    saveDB(); closeModule(); alert('签约成功！');
-  }
-
-  // 租客/合同页面（含在租、已退租、续租、换房、电子合同入口）
-  function renderContractsPage(){
-    document.getElementById('modal-title').innerText = '租客/合同';
-    document.getElementById('modal-body').innerHTML = `
-      <div class="search-bar"><input id="c-kw" class="search-input" placeholder="🔍 姓名/手机号/房间号" oninput="renderContractsList()"></div>
-      <div class="sub-tabs">
-        <div class="sub-tab ${contractTab==='active'?'active':''}" onclick="contractTab='active';renderContractsPage()">在租租客</div>
-        <div class="sub-tab ${contractTab==='history'?'active':''}" onclick="contractTab='history';renderContractsPage()">已退租租客</div>
-      </div>
-      <div id="contracts-list-box" class="card-list"></div>`;
-    renderContractsList();
-  }
-
-  function renderContractsList(){
-    const kw = (document.getElementById('c-kw')?.value||'').toLowerCase(), box = document.getElementById('contracts-list-box');
-    if(contractTab === 'active'){
-      const list = db.rooms.map((r,i)=>({r,i})).filter(x => x.r.status==='rented' && (!kw || x.r.name.toLowerCase().includes(kw) || (x.r.tenant||'').includes(kw) || (x.r.phone||'').includes(kw)));
-      box.innerHTML = list.map(({r,i}) => `
-        
-
+    document.getElementById('modal-body').innerHTML = `<div class="group-title">录入租客与同住人</div><div class="cell-group"><div class="cell-row"><span class="cell-label">租客姓名<span class="req">*</span></span><input id="s-tenant" class="cell-input" placeholder="请填写"></div><div class="cell-row"><span class="cell-label">手机号<span class="req">*</span></span><input id="s-phone" type="tel" class="cell-input" placeholder="请填写"></div><div class="cell-row"><span class="cell-label">身份证号</span><input id="s-idcard" class="cell-input" placeholder="请填写"></div><div class="cell-row"><span class="cell-label">紧急联系人</span><input id="s-emerg" class="cell-input" placeholder="姓名及电话"></div><div id="co-tenant-box"></div><div class="cell-row" style="justify-content:flex-end;"><span style="color:var(--primary);font-size:13px;cursor:pointer;" onclick="addCoTenant()">+ 添加同住人登记</span></div><div class="photo-box"><div style="font-size:13px;">身份证照片(最多2张)</div><div class="photo-list" id="id-photo-list"><label class="photo-add">+ 照片<input type="file" accept="image/*" style="display:none" onchange="uploadImg(event,'id')"></label></div></div></div><div class="group-title">合同、费用与水电底数</div><div class="cell-group"><div class="cell-row"><span class="cell-label">所租房间<span class="req">*</span></span><select id="s-room" class="cell-select" onchange="syncSignRoom()">${vacants.map(r=>`<option value="${r.id}">${r.building}-${r.name}</option>`).join('')}</select></div><div class="cell-row"><span class="cell-label">起租日期</span><input id="s-start" type="date" class="cell-input" value="${today}"></div><div class="cell-row"><span class="cell-label">结束日期</span><input id="s-end" type="date" class="cell-input" value="${nextY}"></div><div class="cell-row"><span class="cell-label">收租周期</span><select id="s-cycle" class="cell-select"><option>月付</option><option>季付</option><option>半年付</option><option>年付</option></select></div><div class="cell-row"><span class="cell-label">每月收租日</span><input id="s-payday" type="number" class="cell-input" value="1"></div><div class="cell-row"><span class="cell-label">月租金(元)</span><input id="s-rent" type="number" class="cell-input" value="${f.rent}"></div><div class="cell-row"><span class="cell-label">押金(元)</span><input id="s-dep" type="number" class="cell-input" value="${f.rent}"></div><div class="cell-row"><span class="cell-label">水单价(元/方)</span><input id="s-water" type="number" class="cell-input" value="${f.waterPrice||5}"></div><div class="cell-row"><span class="cell-label">电单价(元/度)</span><input id="s-elec" type="number" class="cell-input" value="${f.elecPrice||1}"></div><div class="cell-row"><span class="cell-label">入住水表底数</span><input id="s-lw
