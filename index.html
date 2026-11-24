@@ -135,10 +135,26 @@
       </div>
       <div id="managers-list-box"></div>
     </div>
-    <div class="section-title">本地数据备份</div>
-    <div class="item-card">
-      <button class="btn btn-outline" onclick="exportData()" style="margin-bottom:8px;">📤 导出备份文件 (.json)</button>
-      <label class="btn btn-outline" style="display:block;text-align:center;">📥 从备份文件恢复<input type="file" accept=".json" style="display:none" onchange="importData(event)"></label>
+    <div id="cloud-config-section">
+      <div class="section-title">云端同步配置（仅存本机）</div>
+      <div class="item-card">
+        <div id="cloud-config-status" style="font-size:12px;color:var(--sub);margin-bottom:10px;"></div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+          <input id="cfg-sp-url" type="url" class="search-input" placeholder="Supabase URL（如 https://xxx.supabase.co）">
+          <input id="cfg-sp-key" type="password" class="search-input" placeholder="Supabase Anon Key（留空则保持原值）">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" style="flex:1.4" onclick="saveCloudConfig()">保存并同步云端</button>
+          <button class="btn btn-outline" style="flex:1" onclick="clearCloudConfig()">清除本机密钥</button>
+        </div>
+      </div>
+    </div>
+    <div id="backup-section">
+      <div class="section-title">本地数据备份</div>
+      <div class="item-card">
+        <button class="btn btn-outline" onclick="exportData()" style="margin-bottom:8px;">📤 导出备份文件 (.json)</button>
+        <label class="btn btn-outline" style="display:block;text-align:center;">📥 从备份文件恢复<input type="file" accept=".json" style="display:none" onchange="importData(event)"></label>
+      </div>
     </div>
   </div>
 
@@ -180,21 +196,61 @@
   </div>
 
 <script>
-  // 1. 新加坡 Supabase 配置 (已修正 eyJ 小写开头)
-  const SP_URL = 'https://stsfiyzfyfwpbqjkrwbl.supabase.co';
-  const SP_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0c2ZpeXpmeWZ3cGJxamtyd2JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1NTI5NzIsImV4cCI6MjEwOTEyODk3Mn0.TuPWBTPMmi9y06XQAGZsxaTq7vTijyuwRI3pktXBrAQ';
+  // 1. Supabase 配置仅从运行时注入或本机 localStorage 读取，避免在前端源码中硬编码敏感凭证
+  const SP_URL_KEY = 'FDZY_SP_URL', SP_ANON_KEY = 'FDZY_SP_KEY';
   const STORAGE_KEY = 'FDZY_SUPA_DB_V6', LOGIN_KEY = 'FDZY_PHONE_V6';
   const FEE_OPTIONS = ['卫生管理费','电梯费','电视费','网络费','物业费','钥匙押金','燃气'];
 
-  let currentPhone = localStorage.getItem(LOGIN_KEY) || '13590174063';
+  let currentPhone = localStorage.getItem(LOGIN_KEY) || '';
   let activeRoomIdx = -1, roomFilter = 'ALL', activeBuilding = 'ALL', billFilter = 'ALL', contractTab = 'active', repairTab = 'pending';
   let tempSignFees = [], tempCoRefunds = [], tempCoCharges = [];
 
   let db = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {
-    adminPhone:'13590174063', restrictMgr:false, managers:[], rooms:[], pastTenants:[], bills:[], repairs:[], expenses:[], ledger:[], scanCount:0
+    adminPhone:'', restrictMgr:false, managers:[], rooms:[], pastTenants:[], bills:[], repairs:[], expenses:[], ledger:[], scanCount:0
   };
 
-  function isBoss(){ return !db.adminPhone || currentPhone === db.adminPhone; }
+  function getSupabaseConfig(){
+    const cfg = window.__APP_CONFIG__ || {};
+    const url = String(cfg.supabaseUrl || localStorage.getItem(SP_URL_KEY) || '').trim().replace(/\/+$/, '');
+    const key = String(cfg.supabaseAnonKey || localStorage.getItem(SP_ANON_KEY) || '').trim();
+    return { url, key };
+  }
+
+  function parseNum(val){
+    if(val === '' || val === null || val === undefined || val === '-') return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function formatMoney(n){
+    const num = Number(n);
+    if(!Number.isFinite(num)) return '0';
+    return String(Number(num.toFixed(2)));
+  }
+
+  function getPrevMeter(billLast, roomLast){
+    const fromBill = parseNum(billLast);
+    if(fromBill !== null) return fromBill;
+    const fromRoom = parseNum(roomLast);
+    if(fromRoom !== null) return fromRoom;
+    return 0;
+  }
+
+  function maskPhone(phone){
+    const s = String(phone || '').trim();
+    if(!s) return '未设置';
+    if(s.length >= 7) return s.slice(0, 3) + '****' + s.slice(-4);
+    return '****';
+  }
+
+  function maskIdCard(idCard){
+    const s = String(idCard || '').trim();
+    if(!s) return '-';
+    if(s.length >= 8) return s.slice(0, 4) + '**********' + s.slice(-4);
+    return '****';
+  }
+
+  function isBoss(){ return !db.adminPhone || (!!currentPhone && currentPhone === db.adminPhone); }
   function canEditCritical(){ return isBoss() || !db.restrictMgr; }
 
   function setSyncBadge(t, warn){
@@ -203,15 +259,22 @@
   }
 
   async function syncFromCloud(manual){
+    const { url, key } = getSupabaseConfig();
+    if(!url || !key){
+      setSyncBadge('⚙️ 未配置云端', true);
+      refreshDashboard();
+      if(manual) alert('尚未配置本机云端连接，请前往底部【我的】->【云端同步配置】填写 Supabase URL 与 Anon Key。');
+      return;
+    }
     setSyncBadge('🔄 同步中', true);
     try {
-      const res = await fetch(`${SP_URL}/rest/v1/store?id=eq.1&select=data`, {
-        headers: { 'apikey': SP_KEY, 'Authorization': `Bearer ${SP_KEY}` }
+      const res = await fetch(`${url}/rest/v1/store?id=eq.1&select=data`, {
+        headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
       });
       if(!res.ok) throw new Error();
       const rows = await res.json();
       if(rows.length > 0 && rows[0].data){
-        db = Object.assign({adminPhone:'13590174063',restrictMgr:false,managers:[],rooms:[],pastTenants:[],bills:[],repairs:[],expenses:[],ledger:[],scanCount:0}, rows[0].data);
+        db = Object.assign({adminPhone:'',restrictMgr:false,managers:[],rooms:[],pastTenants:[],bills:[],repairs:[],expenses:[],ledger:[],scanCount:0}, rows[0].data);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
       } else {
         await saveDB();
@@ -228,11 +291,16 @@
   async function saveDB(){
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     refreshDashboard();
+    const { url, key } = getSupabaseConfig();
+    if(!url || !key){
+      setSyncBadge('💾 仅本地保存', true);
+      return;
+    }
     setSyncBadge('🔄 保存中', true);
     try {
-      const res = await fetch(`${SP_URL}/rest/v1/store`, {
+      const res = await fetch(`${url}/rest/v1/store`, {
         method: 'POST',
-        headers: { 'apikey': SP_KEY, 'Authorization': `Bearer ${SP_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+        headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify({ id: 1, data: db })
       });
       if(res.ok) setSyncBadge('☁️ 已同步', false);
@@ -391,17 +459,20 @@
     const b = document.getElementById('ar-bldg').value.trim()||'5栋';
     const n = document.getElementById('ar-single').value.trim();
     if(!n) return alert('请输入房间号！');
-    const rent = Number(document.getElementById('ar-rent').value||1000);
-    const wp = Number(document.getElementById('ar-wp').value||5), ep = Number(document.getElementById('ar-ep').value||1);
+    const rent = parseNum(document.getElementById('ar-rent').value) ?? 1000;
+    const wp = parseNum(document.getElementById('ar-wp').value) ?? 5;
+    const ep = parseNum(document.getElementById('ar-ep').value) ?? 1;
     db.rooms.push({ id:'RM_'+Date.now(), building:b, name:n, rent, waterPrice:wp, elecPrice:ep, lastWater:0, lastElec:0, vacantSince:new Date().toISOString().slice(0,10), status:'vacant' });
     saveDB(); closeAction(); activeBuilding = b; renderRoomsPage();
   }
 
   function bulkCreateRoomsExec(){
     const b = document.getElementById('ar-bldg').value.trim()||'5栋';
-    const f = Number(document.getElementById('ar-floors').value||1), p = Number(document.getElementById('ar-per').value||8);
-    const rent = Number(document.getElementById('ar-rent').value||1000);
-    const wp = Number(document.getElementById('ar-wp').value||5), ep = Number(document.getElementById('ar-ep').value||1);
+    const f = parseNum(document.getElementById('ar-floors').value) ?? 1;
+    const p = parseNum(document.getElementById('ar-per').value) ?? 8;
+    const rent = parseNum(document.getElementById('ar-rent').value) ?? 1000;
+    const wp = parseNum(document.getElementById('ar-wp').value) ?? 5;
+    const ep = parseNum(document.getElementById('ar-ep').value) ?? 1;
     const td = new Date().toISOString().slice(0,10);
     for(let i=1; i<=f; i++){
       for(let j=1; j<=p; j++){
@@ -443,11 +514,11 @@
           <div class="cell-row"><span class="cell-label">房间号</span><span>${r.name}</span></div>
           <div class="cell-row"><span class="cell-label">房间状态</span><span>${r.status==='vacant'?'空房':'已租'}</span></div>
           <div class="cell-row"><span class="cell-label">所在楼栋</span><span>${r.building}</span></div>
-          <div class="cell-row"><span class="cell-label">建议租金(元)</span><input id="rt-rent" type="number" class="cell-input" value="${r.rent||1000}"></div>
-          <div class="cell-row"><span class="cell-label">水单价(元/立方)</span><input id="rt-wp" type="number" class="cell-input" value="${r.waterPrice||5}"></div>
-          <div class="cell-row"><span class="cell-label">电单价(元/度)</span><input id="rt-ep" type="number" class="cell-input" value="${r.elecPrice||1}"></div>
-          <div class="cell-row"><span class="cell-label">水表底数</span><input id="rt-lw" type="number" class="cell-input" value="${r.lastWater||0}"></div>
-          <div class="cell-row"><span class="cell-label">电表底数</span><input id="rt-le" type="number" class="cell-input" value="${r.lastElec||0}"></div>
+          <div class="cell-row"><span class="cell-label">建议租金(元)</span><input id="rt-rent" type="number" class="cell-input" value="${parseNum(r.rent) ?? 1000}"></div>
+          <div class="cell-row"><span class="cell-label">水单价(元/立方)</span><input id="rt-wp" type="number" class="cell-input" value="${parseNum(r.waterPrice) ?? 5}"></div>
+          <div class="cell-row"><span class="cell-label">电单价(元/度)</span><input id="rt-ep" type="number" class="cell-input" value="${parseNum(r.elecPrice) ?? 1}"></div>
+          <div class="cell-row"><span class="cell-label">水表底数</span><input id="rt-lw" type="number" class="cell-input" value="${parseNum(r.lastWater) ?? 0}"></div>
+          <div class="cell-row"><span class="cell-label">电表底数</span><input id="rt-le" type="number" class="cell-input" value="${parseNum(r.lastElec) ?? 0}"></div>
         </div>
         <div style="padding:0 14px;display:flex;justify-content:space-between;font-size:14px;margin-bottom:14px;">
           <span style="color:var(--primary);cursor:pointer;" onclick="saveRoomBasic()">📝 保存修改信息</span>
@@ -494,15 +565,16 @@
 
   function saveRoomBasic(){
     const r = db.rooms[activeRoomIdx];
-    r.rent = Number(document.getElementById('rt-rent').value||1000);
-    r.waterPrice = Number(document.getElementById('rt-wp').value||5);
-    r.elecPrice = Number(document.getElementById('rt-ep').value||1);
-    r.lastWater = Number(document.getElementById('rt-lw').value||0);
-    r.lastElec = Number(document.getElementById('rt-le').value||0);
+    r.rent = parseNum(document.getElementById('rt-rent').value) ?? 1000;
+    r.waterPrice = parseNum(document.getElementById('rt-wp').value) ?? 5;
+    r.elecPrice = parseNum(document.getElementById('rt-ep').value) ?? 1;
+    r.lastWater = parseNum(document.getElementById('rt-lw').value) ?? 0;
+    r.lastElec = parseNum(document.getElementById('rt-le').value) ?? 0;
     saveDB(); alert('房间信息已保存！'); switchRoomTab('basic', document.querySelectorAll('#lv3-tabs .r-tab')[0]);
   }
 
   function deleteRoom(){
+    if(!canEditCritical()) return alert('当前账号无删除房间权限！');
     if(!confirm('确定要删除该房间吗？')) return;
     db.rooms.splice(activeRoomIdx, 1);
     saveDB(); closeLv3(); renderBuildingsPage();
@@ -551,6 +623,7 @@
 
   function openTenantDetail(idx){
     const r = db.rooms[idx]; if(!r) return;
+    const boss = isBoss();
     document.getElementById('action-sheet').classList.add('show');
     document.getElementById('action-title-text').innerText = `租客详情：${r.tenant}`;
     document.getElementById('action-body').innerHTML = `
@@ -559,8 +632,8 @@
         <div class="cell-row"><span class="cell-label">手机号</span><span>${r.phone}</span></div>
         <div class="cell-row"><span class="cell-label">所租房间</span><span>${r.building} - ${r.name}</span></div>
         <div class="cell-row"><span class="cell-label">起租日期</span><span>${r.startDate}</span></div>
-        <div class="cell-row"><span class="cell-label">身份证号</span><span>${r.idCard||'-'}</span></div>
-        <div class="cell-row"><span class="cell-label">身份证地址</span><span>${r.idAddr||'-'}</span></div>
+        <div class="cell-row"><span class="cell-label">身份证号</span><span>${maskIdCard(r.idCard)}</span></div>
+        <div class="cell-row"><span class="cell-label">身份证地址</span><span>${boss ? (r.idAddr||'-') : '仅主房东可见'}</span></div>
       </div>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-danger" style="flex:1" onclick="closeAction();openCheckoutForm('${r.id}')">退租</button>
@@ -582,19 +655,20 @@
         <div class="cell-row"><span class="cell-label">收租周期</span><span>${r.cycle||'月付 (每月收一次)'}</span></div>
         <div class="cell-row"><span class="cell-label">账单计费周期</span><span>${r.billMode||'按起租日算'}</span></div>
         <div class="cell-row"><span class="cell-label">租金 / 押金</span><span>¥${r.rent}/月 | 押金 ¥${r.deposit||0}</span></div>
-        <div class="cell-row"><span class="cell-label">水 / 电单价</span><span>水 ${r.waterPrice||5}元/方 | 电 ${r.elecPrice||1}元/度</span></div>
+        <div class="cell-row"><span class="cell-label">水 / 电单价</span><span>水 ${parseNum(r.waterPrice) ?? 5}元/方 | 电 ${parseNum(r.elecPrice) ?? 1}元/度</span></div>
       </div>
       <div style="display:flex;gap:10px;">
-        <button class="btn btn-danger" style="flex:1" onclick="voidContract(${idx})">作废合同</button>
+        ${canEditCritical() ? `<button class="btn btn-danger" style="flex:1" onclick="voidContract(${idx})">作废合同</button>` : ''}
         <button class="btn" style="flex:1" onclick="closeAction()">确定</button>
       </div>`;
   }
 
   function voidContract(idx){
+    if(!canEditCritical()) return alert('当前账号无作废合同权限！');
     if(!confirm('如果租约信息填错，可作废合同并将房间恢复为空房。确定作废吗？')) return;
     const r = db.rooms[idx];
     db.bills = db.bills.filter(b => b.roomId !== r.id);
-    r.status = 'vacant'; delete r.tenant; delete r.phone;
+    r.status = 'vacant'; delete r.tenant; delete r.phone; delete r.idCard; delete r.idAddr;
     saveDB(); closeAction(); closeLv3(); renderBuildingsPage();
   }
 
@@ -785,6 +859,16 @@
   function openMeterForm(bIdx){
     const b = db.bills[bIdx]; if(!b) return;
     const r = db.rooms.find(x => x.id === b.roomId) || { rent:1000, waterPrice:8, elecPrice:1, lastWater:0, lastElec:0 };
+    const lastW = getPrevMeter(b.lastW, r.lastWater);
+    const lastE = getPrevMeter(b.lastE, r.lastElec);
+    const curWVal = parseNum(b.curW);
+    const curEVal = parseNum(b.curE);
+    const wp = parseNum(r.waterPrice) ?? 8;
+    const ep = parseNum(r.elecPrice) ?? 1;
+    const rentVal = parseNum(b.rent) ?? parseNum(r.rent) ?? 1000;
+    const depVal = parseNum(b.deposit) ?? 0;
+    const extraVal = parseNum(b.extraFee) ?? 0;
+
     document.getElementById('lv3-modal').classList.add('show');
     document.getElementById('lv3-tabs').style.display = 'none';
     document.getElementById('lv3-title').innerText = b.status === 'paid' ? '账单详情' : '编辑账单';
@@ -798,20 +882,21 @@
       <div class="cell-group">
         <div class="cell-row"><span class="cell-label">账期</span><span>${b.period||b.month}</span></div>
         <div class="cell-row"><span class="cell-label">账单状态</span><span style="font-weight:700;">${b.status==='paid'?'已收租':(b.status==='unmetered'?'未抄表':'已抄表未收租')}</span></div>
-        <div class="cell-row"><span class="cell-label">租金<span class="req">*</span></span><input id="am-rent" type="number" class="cell-input" value="${b.rent||r.rent||1000}" oninput="calcMeter(${bIdx})"><span style="margin-left:4px;">元</span></div>
-        ${b.deposit ? `<div class="cell-row"><span class="cell-label">押金<span class="req">*</span></span><input id="am-dep" type="number" class="cell-input" value="${b.deposit}" oninput="calcMeter(${bIdx})"><span style="margin-left:4px;">元</span></div>` : ''}
+        <div class="cell-row"><span class="cell-label">租金<span class="req">*</span></span><input id="am-rent" type="number" class="cell-input" value="${rentVal}" oninput="calcMeter(${bIdx})"><span style="margin-left:4px;">元</span></div>
+        ${depVal > 0 ? `<div class="cell-row"><span class="cell-label">押金<span class="req">*</span></span><input id="am-dep" type="number" class="cell-input" value="${depVal}" oninput="calcMeter(${bIdx})"><span style="margin-left:4px;">元</span></div>` : ''}
+        ${extraVal > 0 ? `<div class="cell-row"><span class="cell-label">固定杂费</span><span>${formatMoney(extraVal)} 元</span></div>` : ''}
       </div>
       <div class="cell-group">
-        <div class="cell-row"><span class="cell-label" style="font-weight:700;">水<span class="req">*</span></span><span id="am-w-fee" style="font-weight:700;">${b.waterFee||0} 元</span></div>
-        <div class="cell-row"><span class="cell-label">上期表底：</span><span>${b.lastW ?? (r.lastWater||'-')}</span></div>
-        <div class="cell-row"><span class="cell-label">本期表底：</span><input id="am-w" type="number" class="search-input" style="max-width:140px;text-align:right;" placeholder="请抄表" value="${b.curW||''}" oninput="calcMeter(${bIdx})"></div>
-        <div class="cell-row"><span class="cell-label">用量：</span><span id="am-w-use">${b.useW||0}</span><span style="margin-left:10px;color:var(--sub);">单价: ${r.waterPrice||8} 元/立方</span></div>
+        <div class="cell-row"><span class="cell-label" style="font-weight:700;">水<span class="req">*</span></span><span id="am-w-fee" style="font-weight:700;">${formatMoney(b.waterFee||0)} 元</span></div>
+        <div class="cell-row"><span class="cell-label">上期表底：</span><span>${lastW}</span></div>
+        <div class="cell-row"><span class="cell-label">本期表底：</span><input id="am-w" type="number" class="search-input" style="max-width:140px;text-align:right;" placeholder="请抄表" value="${curWVal !== null ? curWVal : ''}" oninput="calcMeter(${bIdx})"></div>
+        <div class="cell-row"><span class="cell-label">用量：</span><span id="am-w-use">${b.useW ?? 0}</span><span style="margin-left:10px;color:var(--sub);">单价: ${wp} 元/立方</span></div>
       </div>
       <div class="cell-group">
-        <div class="cell-row"><span class="cell-label" style="font-weight:700;">电<span class="req">*</span></span><span id="am-e-fee" style="font-weight:700;">${b.elecFee||0} 元</span></div>
-        <div class="cell-row"><span class="cell-label">上期表底：</span><span>${b.lastE ?? (r.lastElec||'-')}</span></div>
-        <div class="cell-row"><span class="cell-label">本期表底：</span><input id="am-e" type="number" class="search-input" style="max-width:140px;text-align:right;" placeholder="请抄表" value="${b.curE||''}" oninput="calcMeter(${bIdx})"></div>
-        <div class="cell-row"><span class="cell-label">用量：</span><span id="am-e-use">${b.useE||0}</span><span style="margin-left:10px;color:var(--sub);">单价: ${r.elecPrice||1} 元/度</span></div>
+        <div class="cell-row"><span class="cell-label" style="font-weight:700;">电<span class="req">*</span></span><span id="am-e-fee" style="font-weight:700;">${formatMoney(b.elecFee||0)} 元</span></div>
+        <div class="cell-row"><span class="cell-label">上期表底：</span><span>${lastE}</span></div>
+        <div class="cell-row"><span class="cell-label">本期表底：</span><input id="am-e" type="number" class="search-input" style="max-width:140px;text-align:right;" placeholder="请抄表" value="${curEVal !== null ? curEVal : ''}" oninput="calcMeter(${bIdx})"></div>
+        <div class="cell-row"><span class="cell-label">用量：</span><span id="am-e-use">${b.useE ?? 0}</span><span style="margin-left:10px;color:var(--sub);">单价: ${ep} 元/度</span></div>
       </div>
       <div class="cell-group">
         <div class="cell-row"><span class="cell-label" style="font-weight:700;font-size:16px;">合计金额</span><span id="am-total" style="color:var(--danger);font-size:20px;font-weight:700;">¥${b.total}</span></div>
@@ -827,32 +912,49 @@
 
   function calcMeter(bIdx){
     const b = db.bills[bIdx], r = db.rooms.find(x => x.id === b.roomId) || { waterPrice:8, elecPrice:1, lastWater:0, lastElec:0 };
-    const rent = Number(document.getElementById('am-rent')?.value||0);
-    const dep = Number(document.getElementById('am-dep')?.value||0);
-    const cw = Number(document.getElementById('am-w')?.value||0), ce = Number(document.getElementById('am-e')?.value||0);
-    const uw = r.lastWater ? Math.max(0, cw - r.lastWater) : 0;
-    const ue = r.lastElec ? Math.max(0, ce - r.lastElec) : 0;
-    const wf = uw * (r.waterPrice||8), ef = ue * (r.elecPrice||1);
+    const rent = parseNum(document.getElementById('am-rent')?.value) ?? 0;
+    const dep = parseNum(document.getElementById('am-dep')?.value) ?? 0;
+    const extraFee = parseNum(b.extraFee) ?? 0;
+    const lastW = getPrevMeter(b.lastW, r.lastWater);
+    const lastE = getPrevMeter(b.lastE, r.lastElec);
+    const cw = parseNum(document.getElementById('am-w')?.value);
+    const ce = parseNum(document.getElementById('am-e')?.value);
+    const uw = cw !== null ? Math.max(0, Number((cw - lastW).toFixed(2))) : 0;
+    const ue = ce !== null ? Math.max(0, Number((ce - lastE).toFixed(2))) : 0;
+    const wp = parseNum(r.waterPrice) ?? 8;
+    const ep = parseNum(r.elecPrice) ?? 1;
+    const wf = Number((uw * wp).toFixed(2));
+    const ef = Number((ue * ep).toFixed(2));
     document.getElementById('am-w-use').innerText = uw;
     document.getElementById('am-e-use').innerText = ue;
-    document.getElementById('am-w-fee').innerText = wf + ' 元';
-    document.getElementById('am-e-fee').innerText = ef + ' 元';
-    document.getElementById('am-total').innerText = '¥' + (rent + dep + wf + ef + Number(b.extraFee||0));
+    document.getElementById('am-w-fee').innerText = formatMoney(wf) + ' 元';
+    document.getElementById('am-e-fee').innerText = formatMoney(ef) + ' 元';
+    document.getElementById('am-total').innerText = '¥' + formatMoney(rent + dep + wf + ef + extraFee);
   }
 
   function saveMeterForm(bIdx, andPay){
     const b = db.bills[bIdx], r = db.rooms.find(x => x.id === b.roomId);
-    const rent = Number(document.getElementById('am-rent')?.value||0);
-    const dep = Number(document.getElementById('am-dep')?.value||0);
-    const cw = Number(document.getElementById('am-w')?.value||0), ce = Number(document.getElementById('am-e')?.value||0);
-    const uw = (r && r.lastWater) ? Math.max(0, cw - r.lastWater) : 0;
-    const ue = (r && r.lastElec) ? Math.max(0, ce - r.lastElec) : 0;
-    const wf = uw * (r?.waterPrice||8), ef = ue * (r?.elecPrice||1);
-    b.lastW = r?.lastWater || '-'; b.curW = cw; b.useW = uw; b.waterFee = wf;
-    b.lastE = r?.lastElec || '-'; b.curE = ce; b.useE = ue; b.elecFee = ef;
-    if(r){ if(cw) r.lastWater = cw; if(ce) r.lastElec = ce; }
+    const rent = parseNum(document.getElementById('am-rent')?.value) ?? 0;
+    const dep = parseNum(document.getElementById('am-dep')?.value) ?? 0;
+    const extraFee = parseNum(b.extraFee) ?? 0;
+    const lastW = getPrevMeter(b.lastW, r?.lastWater);
+    const lastE = getPrevMeter(b.lastE, r?.lastElec);
+    const cw = parseNum(document.getElementById('am-w')?.value);
+    const ce = parseNum(document.getElementById('am-e')?.value);
+    const uw = cw !== null ? Math.max(0, Number((cw - lastW).toFixed(2))) : 0;
+    const ue = ce !== null ? Math.max(0, Number((ce - lastE).toFixed(2))) : 0;
+    const wp = parseNum(r?.waterPrice) ?? 8;
+    const ep = parseNum(r?.elecPrice) ?? 1;
+    const wf = Number((uw * wp).toFixed(2));
+    const ef = Number((ue * ep).toFixed(2));
+    b.lastW = lastW; b.curW = cw; b.useW = uw; b.waterFee = wf;
+    b.lastE = lastE; b.curE = ce; b.useE = ue; b.elecFee = ef;
+    if(r){
+      if(cw !== null) r.lastWater = cw;
+      if(ce !== null) r.lastElec = ce;
+    }
     b.rent = rent; b.deposit = dep;
-    b.total = (rent + dep + wf + ef + Number(b.extraFee||0)).toFixed(0);
+    b.total = formatMoney(rent + dep + wf + ef + extraFee);
     b.status = 'unpaid';
 
     if(andPay){
@@ -869,6 +971,11 @@
   // 原版表格式【房租收据】生成
   function showBillReceipt(bIdx){
     const b = db.bills[bIdx], r = db.rooms.find(x => x.id === b.roomId) || { waterPrice:8, elecPrice:1 };
+    const lastW = parseNum(b.lastW), curW = parseNum(b.curW);
+    const lastE = parseNum(b.lastE), curE = parseNum(b.curE);
+    const wp = parseNum(r.waterPrice) ?? 8, ep = parseNum(r.elecPrice) ?? 1;
+    const rentShow = parseNum(b.rent) ?? b.total;
+    const extraVal = parseNum(b.extraFee) ?? 0;
     document.getElementById('action-sheet').classList.add('show');
     document.getElementById('action-title-text').innerText = '账单收据';
     document.getElementById('action-body').innerHTML = `
@@ -880,10 +987,11 @@
         <table class="receipt-table">
           <thead><tr><th>费用项</th><th>上月</th><th>本月</th><th>实用</th><th>单价(元)</th><th>金额(元)</th></tr></thead>
           <tbody>
-            <tr><td>租金</td><td></td><td></td><td></td><td></td><td>${b.rent||b.total}</td></tr>
+            <tr><td>租金</td><td></td><td></td><td></td><td></td><td>${rentShow}</td></tr>
             ${b.deposit ? `<tr><td>押金</td><td></td><td></td><td></td><td></td><td>${b.deposit}</td></tr>` : ''}
-            <tr><td>水</td><td>${b.lastW||'-'}</td><td>${b.curW||'-'}</td><td>${b.useW||0}</td><td>${r.waterPrice||8}</td><td>${b.waterFee||0}</td></tr>
-            <tr><td>电</td><td>${b.lastE||'-'}</td><td>${b.curE||'-'}</td><td>${b.useE||0}</td><td>${r.elecPrice||1}</td><td>${b.elecFee||0}</td></tr>
+            ${extraVal > 0 ? `<tr><td>杂费</td><td></td><td></td><td></td><td></td><td>${formatMoney(extraVal)}</td></tr>` : ''}
+            <tr><td>水</td><td>${lastW !== null ? lastW : '-'}</td><td>${curW !== null ? curW : '-'}</td><td>${b.useW ?? 0}</td><td>${wp}</td><td>${formatMoney(b.waterFee||0)}</td></tr>
+            <tr><td>电</td><td>${lastE !== null ? lastE : '-'}</td><td>${curE !== null ? curE : '-'}</td><td>${b.useE ?? 0}</td><td>${ep}</td><td>${formatMoney(b.elecFee||0)}</td></tr>
           </tbody>
         </table>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-weight:700;font-size:16px;">
@@ -901,14 +1009,18 @@
     document.getElementById('modal-title').innerText = '整栋集中抄表';
     document.getElementById('modal-body').innerHTML = `
       <div style="padding:12px 14px;font-size:13px;color:#666;background:#fff8e6;">输入各房间本月最新水电表读数，一键批量生成全楼账单：</div>
-      <div class="card-list">${rented.map((r,i) => `
+      <div class="card-list">${rented.map((r,i) => {
+        const lw = parseNum(r.lastWater) ?? 0;
+        const le = parseNum(r.lastElec) ?? 0;
+        return `
         <div class="item-card">
           <div class="item-header"><span>${r.building} - ${r.name} (${r.tenant})</span><span>租金 ¥${r.rent}</span></div>
           <div style="display:flex;gap:10px;margin-top:8px;">
-            <div style="flex:1;font-size:12px;">水表(上月:${r.lastWater||0})<input id="bm-w-${i}" type="number" class="search-input" style="width:100%;margin-top:4px;" value="${r.lastWater||0}"></div>
-            <div style="flex:1;font-size:12px;">电表(上月:${r.lastElec||0})<input id="bm-e-${i}" type="number" class="search-input" style="width:100%;margin-top:4px;" value="${r.lastElec||0}"></div>
+            <div style="flex:1;font-size:12px;">水表(上月:${lw})<input id="bm-w-${i}" type="number" class="search-input" style="width:100%;margin-top:4px;" value="${lw}"></div>
+            <div style="flex:1;font-size:12px;">电表(上月:${le})<input id="bm-e-${i}" type="number" class="search-input" style="width:100%;margin-top:4px;" value="${le}"></div>
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
         <button class="btn" onclick="submitBulkMeter()">⚡ 一键批量生成账单</button>
       </div>`;
   }
@@ -916,16 +1028,25 @@
   function submitBulkMeter(){
     const rented = db.rooms.filter(r => r.status === 'rented'), curM = new Date().toISOString().slice(0,7), td = new Date().toISOString().slice(0,10);
     rented.forEach((rm, i) => {
-      const cw = Number(document.getElementById(`bm-w-${i}`).value||rm.lastWater||0);
-      const ce = Number(document.getElementById(`bm-e-${i}`).value||rm.lastElec||0);
-      const uw = Math.max(0, cw - (rm.lastWater||0)), ue = Math.max(0, ce - (rm.lastElec||0));
-      const wf = uw * (rm.waterPrice||8), ef = ue * (rm.elecPrice||1);
+      const prevW = parseNum(rm.lastWater) ?? 0;
+      const prevE = parseNum(rm.lastElec) ?? 0;
+      const cw = parseNum(document.getElementById(`bm-w-${i}`).value) ?? prevW;
+      const ce = parseNum(document.getElementById(`bm-e-${i}`).value) ?? prevE;
+      const uw = Math.max(0, Number((cw - prevW).toFixed(2)));
+      const ue = Math.max(0, Number((ce - prevE).toFixed(2)));
+      const wp = parseNum(rm.waterPrice) ?? 8;
+      const ep = parseNum(rm.elecPrice) ?? 1;
+      const wf = Number((uw * wp).toFixed(2));
+      const ef = Number((ue * ep).toFixed(2));
+      const exSum = (rm.extraFees||[]).reduce((s,f)=>s + Number(f.amt ?? f.amount ?? 0), 0);
       rm.lastWater = cw; rm.lastElec = ce;
       db.bills.unshift({
         id:'BL_'+Date.now()+'_'+i, roomId:rm.id, building:rm.building, roomName:`${rm.building} - ${rm.name}`,
         tenant:rm.tenant, phone:rm.phone, month:curM, date:td, period:`${curM}-01 至 ${curM}-30`,
-        rent:rm.rent, deposit:0, curW:cw, useW:uw, waterFee:wf, curE:ce, useE:ue, elecFee:ef,
-        total:(rm.rent + wf + ef).toFixed(0), status:'unpaid'
+        rent:rm.rent, deposit:0, extraFee:exSum,
+        lastW:prevW, curW:cw, useW:uw, waterFee:wf,
+        lastE:prevE, curE:ce, useE:ue, elecFee:ef,
+        total:formatMoney(Number(rm.rent||0) + wf + ef + exSum), status:'unpaid'
       });
     });
     saveDB(); openModule('bills','ALL'); alert(`已批量生成 ${rented.length} 份账单！`);
@@ -1005,7 +1126,7 @@
       settleNote:`应退¥${refSum} 应收¥${chgSum}`
     });
     r.status = 'vacant'; r.vacantSince = new Date().toISOString().slice(0,10);
-    delete r.tenant; delete r.phone;
+    delete r.tenant; delete r.phone; delete r.idCard; delete r.idAddr;
     saveDB(); closeLv3(); openCheckoutHome(); alert('退租结算完成，房间已恢复为空房！');
   }
 
@@ -1067,28 +1188,98 @@
 
   // --- 10. 我的与管房组 ---
   function renderManagersSection(){
+    const boss = isBoss();
+    const { url, key } = getSupabaseConfig();
     const t = document.getElementById('cur-user-title'), p = document.getElementById('cur-user-phone');
-    if(t) t.innerText = isBoss() ? '👑 主房东' : '👤 管房员';
-    if(p) p.innerText = `当前手机号：${currentPhone}`;
+    if(t) t.innerText = boss ? '👑 主房东' : '👤 管房员';
+    if(p) p.innerText = currentPhone ? `当前手机号：${maskPhone(currentPhone)}` : '尚未绑定登录手机号（点击右侧设置）';
+
+    const adminPanel = document.getElementById('manager-admin-panel');
+    if(adminPanel) adminPanel.style.display = boss ? 'block' : 'none';
+    const backupSec = document.getElementById('backup-section');
+    if(backupSec) backupSec.style.display = boss ? 'block' : 'none';
+    const cloudSec = document.getElementById('cloud-config-section');
+    if(cloudSec) cloudSec.style.display = (boss || !url || !key) ? 'block' : 'none';
+
+    const cfgStatus = document.getElementById('cloud-config-status');
+    const urlInput = document.getElementById('cfg-sp-url');
+    if(cfgStatus){
+      cfgStatus.innerText = (url && key)
+        ? `状态：已配置本机云端连接（密钥已加密隐藏，不随源码公开）`
+        : '状态：未配置（当前仅保存在本机浏览器）';
+      cfgStatus.style.color = (url && key) ? 'var(--success)' : 'var(--warn)';
+    }
+    if(urlInput && document.activeElement !== urlInput && !urlInput.value && url){
+      urlInput.value = url;
+    }
+
     const chk = document.getElementById('restrict-mgr-chk'); if(chk) chk.checked = !!db.restrictMgr;
     const box = document.getElementById('managers-list-box'); if(!box) return;
-    box.innerHTML = `<div class="cell-row"><span>主房东 (${db.adminPhone})</span><span class="badge blue">创建者</span></div>` +
-      (db.managers||[]).map((m,i) => `<div class="cell-row"><span>${m.name} (${m.phone})</span>${isBoss()?`<button class="btn-sm danger" onclick="db.managers.splice(${i},1);saveDB()">移除</button>`:'<span class="badge">管房员</span>'}</div>`).join('');
+    const adminDisplay = boss ? (db.adminPhone || '未绑定') : maskPhone(db.adminPhone);
+    box.innerHTML = `<div class="cell-row"><span>主房东 (${adminDisplay})</span><span class="badge blue">创建者</span></div>` +
+      (db.managers||[]).map((m,i) => `<div class="cell-row"><span>${m.name} (${boss ? m.phone : maskPhone(m.phone)})</span>${boss?`<button class="btn-sm danger" onclick="removeManager(${i})">移除</button>`:'<span class="badge">管房员</span>'}</div>`).join('');
+  }
+
+  function saveCloudConfig(){
+    const urlEl = document.getElementById('cfg-sp-url');
+    const keyEl = document.getElementById('cfg-sp-key');
+    const url = (urlEl?.value || '').trim().replace(/\/+$/, '');
+    const newKey = (keyEl?.value || '').trim();
+    const oldKey = (localStorage.getItem(SP_ANON_KEY) || '').trim();
+    const finalKey = newKey || oldKey;
+    if(!/^https?:\/\//i.test(url)) return alert('请输入有效的 Supabase URL（以 https:// 开头）！');
+    if(!finalKey) return alert('请输入 Supabase Anon Key！');
+    localStorage.setItem(SP_URL_KEY, url);
+    localStorage.setItem(SP_ANON_KEY, finalKey);
+    if(keyEl) keyEl.value = '';
+    syncFromCloud(true);
+  }
+
+  function clearCloudConfig(){
+    if(!confirm('确定清除本机保存的 Supabase 云端连接密钥吗？清除后将切换为仅本地保存模式。')) return;
+    localStorage.removeItem(SP_URL_KEY);
+    localStorage.removeItem(SP_ANON_KEY);
+    const urlEl = document.getElementById('cfg-sp-url');
+    const keyEl = document.getElementById('cfg-sp-key');
+    if(urlEl) urlEl.value = '';
+    if(keyEl) keyEl.value = '';
+    setSyncBadge('⚙️ 未配置云端', true);
+    refreshDashboard();
   }
 
   function switchAccountPrompt(){
     const p = prompt('请输入登录手机号：', currentPhone);
-    if(p){ currentPhone = p.trim(); localStorage.setItem(LOGIN_KEY, currentPhone); refreshDashboard(); }
+    if(p === null) return;
+    const trimmed = p.trim();
+    if(!trimmed) return;
+    currentPhone = trimmed;
+    localStorage.setItem(LOGIN_KEY, currentPhone);
+    if(!db.adminPhone && confirm('当前尚未绑定主房东手机号，是否将该手机号设为“主房东”账号？')){
+      db.adminPhone = currentPhone;
+      saveDB();
+    } else {
+      refreshDashboard();
+    }
   }
 
-  function toggleMgrRestrict(val){ db.restrictMgr = val; saveDB(); }
+  function toggleMgrRestrict(val){
+    if(!isBoss()) return alert('仅主房东可修改管家权限！');
+    db.restrictMgr = val; saveDB();
+  }
 
   function addManager(){
+    if(!isBoss()) return alert('仅主房东可添加管房员！');
     const n = document.getElementById('m-name').value.trim()||'管家', p = document.getElementById('m-phone').value.trim();
     if(!p) return alert('请输入管家手机号！');
     db.managers.push({ name:n, phone:p });
     document.getElementById('m-name').value = ''; document.getElementById('m-phone').value = '';
     saveDB(); alert('已添加管房员：'+n);
+  }
+
+  function removeManager(idx){
+    if(!isBoss()) return alert('仅主房东可移除管房员！');
+    db.managers.splice(idx, 1);
+    saveDB();
   }
 
   function switchTab(tab, el){
@@ -1099,12 +1290,14 @@
   }
 
   function exportData(){
+    if(!isBoss()) return alert('仅主房东可导出全量数据备份！');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));
     a.download = `房东之友备份_${new Date().toISOString().slice(0,10)}.json`; a.click();
   }
 
   function importData(e){
+    if(!isBoss()) return alert('仅主房东可恢复数据备份！');
     const f = e.target.files[0]; if(!f) return;
     const rd = new FileReader();
     rd.onload = ev => { try{ db = Object.assign(db, JSON.parse(ev.target.result)); saveDB(); alert('数据恢复成功！'); }catch(x){ alert('文件格式有误'); } };
