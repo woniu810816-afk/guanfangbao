@@ -113,14 +113,17 @@
 
   <!-- 4. 我的页面 -->
   <div id="tab-mine" class="container" style="display:none;">
-    <div class="item-card" style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="item-card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
       <div>
-        <div style="font-size:16px;font-weight:700;" id="cur-user-title">👑 主房东</div>
+        <div style="font-size:16px;font-weight:700;" id="cur-user-title">🔒 未登录</div>
         <div style="font-size:13px;color:var(--sub);margin-top:4px;" id="cur-user-phone"></div>
       </div>
-      <button class="btn-sm" onclick="switchAccountPrompt()">切换手机号</button>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn-sm primary" onclick="openLoginSheet()">登录/切换</button>
+        <button class="btn-sm" id="logout-btn" style="display:none;" onclick="logoutSession()">退出</button>
+      </div>
     </div>
-    <div class="section-title">管房组与管家权限</div>
+    <div class="section-title">管房组与楼栋权限分配</div>
     <div class="item-card">
       <div id="manager-admin-panel" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:center;background:#fff8e6;padding:8px 10px;border-radius:6px;margin-bottom:10px;font-size:12px;">
@@ -135,16 +138,26 @@
       </div>
       <div id="managers-list-box"></div>
     </div>
+    <div id="migration-section" style="display:none;">
+      <div class="section-title">老数据无损迁移（升级多表架构）</div>
+      <div class="item-card">
+        <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:10px;">
+          已升级为规范化多表 + 数据库行级权限（RLS）架构。点击下方按钮可将旧云端 <code>store</code> 表或本机缓存中的楼栋、房源、租约与历史账单无损幂等导入新表（重复点击不会产生重复数据）。
+        </div>
+        <button class="btn" onclick="migrateLegacyData()" style="margin-bottom:8px;">🚀 一键迁移云端/本机老数据</button>
+        <label class="btn btn-outline" style="display:block;text-align:center;">📂 选择老备份 (.json) 导入新表<input type="file" accept=".json" style="display:none" onchange="importAndMigrateBackup(event)"></label>
+      </div>
+    </div>
     <div id="cloud-config-section">
       <div class="section-title">云端同步配置（仅存本机）</div>
       <div class="item-card">
         <div id="cloud-config-status" style="font-size:12px;color:var(--sub);margin-bottom:10px;"></div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
           <input id="cfg-sp-url" type="url" class="search-input" placeholder="Supabase URL（如 https://xxx.supabase.co）">
-          <input id="cfg-sp-key" type="password" class="search-input" placeholder="Supabase Anon Key（留空则保持原值）">
+          <input id="cfg-sp-key" type="password" class="search-input" placeholder="Supabase 可发布密钥（支持 sb_publishable_... 或 anon Key）">
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn" style="flex:1.4" onclick="saveCloudConfig()">保存并同步云端</button>
+          <button class="btn" style="flex:1.4" onclick="saveCloudConfig()">保存并连接云端</button>
           <button class="btn btn-outline" style="flex:1" onclick="clearCloudConfig()">清除本机密钥</button>
         </div>
       </div>
@@ -196,24 +209,111 @@
   </div>
 
 <script>
-  // 1. Supabase 配置仅从运行时注入或本机 localStorage 读取，避免在前端源码中硬编码敏感凭证
+  // 1. Supabase 配置与会话仅从运行时注入或本机 localStorage 读取，绝不在前端源码硬编码敏感凭证
   const SP_URL_KEY = 'FDZY_SP_URL', SP_ANON_KEY = 'FDZY_SP_KEY';
   const STORAGE_KEY = 'FDZY_SUPA_DB_V6', LOGIN_KEY = 'FDZY_PHONE_V6';
+  const SESSION_TOKEN_KEY = 'FDZY_SESSION_TOKEN_V2', PROFILE_KEY = 'FDZY_PROFILE_V2', AUTH_JWT_KEY = 'FDZY_AUTH_JWT_V2';
+  const PROFILE_COLS = 'id,phone,display_name,role,restrict_manager,is_active';
   const FEE_OPTIONS = ['卫生管理费','电梯费','电视费','网络费','物业费','钥匙押金','燃气'];
 
   let currentPhone = localStorage.getItem(LOGIN_KEY) || '';
+  let currentProfile = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
   let activeRoomIdx = -1, roomFilter = 'ALL', activeBuilding = 'ALL', billFilter = 'ALL', contractTab = 'active', repairTab = 'pending';
   let tempSignFees = [], tempCoRefunds = [], tempCoCharges = [];
 
-  let db = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {
-    adminPhone:'', restrictMgr:false, managers:[], rooms:[], pastTenants:[], bills:[], repairs:[], expenses:[], ledger:[], scanCount:0
-  };
+  function createEmptyDB(){
+    return {
+      adminPhone:'', restrictMgr:false,
+      buildings:[], profiles:[], assignments:[],
+      managers:[], rooms:[], contracts:[], pastTenants:[],
+      bills:[], meterReadings:[], repairs:[], expenses:[], ledger:[], scanCount:0
+    };
+  }
+
+  let db = Object.assign(createEmptyDB(), JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || {});
 
   function getSupabaseConfig(){
     const cfg = window.__APP_CONFIG__ || {};
     const url = String(cfg.supabaseUrl || localStorage.getItem(SP_URL_KEY) || '').trim().replace(/\/+$/, '');
     const key = String(cfg.supabaseAnonKey || localStorage.getItem(SP_ANON_KEY) || '').trim();
     return { url, key };
+  }
+
+  function isCloudConfigured(){
+    const { url, key } = getSupabaseConfig();
+    return !!(url && key);
+  }
+
+  function getSessionToken(){
+    return String(localStorage.getItem(SESSION_TOKEN_KEY) || '').trim();
+  }
+
+  function getAuthJwt(){
+    const cfg = window.__APP_CONFIG__ || {};
+    return String(cfg.authJwt || localStorage.getItem(AUTH_JWT_KEY) || '').trim();
+  }
+
+  // 区分旧版 3 段式 JWT 密钥（eyJ...）与新版可发布密钥（sb_publishable_...）
+  function isLegacyJwtKey(k){
+    return typeof k === 'string' && k.startsWith('eyJ') && k.split('.').length === 3;
+  }
+
+  function isCloudAuthenticated(){
+    return isCloudConfigured() && (!!getSessionToken() || !!getAuthJwt());
+  }
+
+  function buildSupabaseHeaders(extra = {}){
+    const { key } = getSupabaseConfig();
+    const headers = Object.assign({ 'apikey': key }, extra);
+    // 新版 sb_publishable_ 密钥并非 JWT，严禁放入 Authorization: Bearer 头，避免 PostgREST 返回 401
+    const authJwt = getAuthJwt();
+    if(authJwt){
+      headers['Authorization'] = `Bearer ${authJwt}`;
+    } else if(isLegacyJwtKey(key)){
+      headers['Authorization'] = `Bearer ${key}`;
+    }
+    const sessionToken = getSessionToken();
+    if(sessionToken){
+      headers['x-gfb-session'] = sessionToken;
+    }
+    return headers;
+  }
+
+  async function sbRequest(path, options = {}){
+    const { url, key } = getSupabaseConfig();
+    if(!url || !key) throw new Error('尚未配置 Supabase 云端连接');
+    const method = options.method || 'GET';
+    const extraHeaders = Object.assign({}, options.headers || {});
+    if(options.body !== undefined && !extraHeaders['Content-Type']){
+      extraHeaders['Content-Type'] = 'application/json';
+    }
+    const res = await fetch(`${url}/rest/v1/${path}`, {
+      method,
+      headers: buildSupabaseHeaders(extraHeaders),
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined
+    });
+    const text = await res.text();
+    let data = null;
+    if(text){
+      try { data = JSON.parse(text); } catch(_) { data = text; }
+    }
+    if(!res.ok){
+      const msg = (data && (data.message || data.hint || data.details || data.error_description)) || `HTTP ${res.status}`;
+      const err = new Error(msg);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  async function sbRpc(fnName, payload = {}){
+    return sbRequest(`rpc/${fnName}`, { method: 'POST', body: payload });
+  }
+
+  function saveLocalCache(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    refreshDashboard();
   }
 
   function parseNum(val){
@@ -250,62 +350,290 @@
     return '****';
   }
 
-  function isBoss(){ return !db.adminPhone || (!!currentPhone && currentPhone === db.adminPhone); }
-  function canEditCritical(){ return isBoss() || !db.restrictMgr; }
+  function isBoss(){
+    if(isCloudConfigured()){
+      return !!(currentProfile && currentProfile.role === 'landlord');
+    }
+    return !db.adminPhone || (!!currentPhone && currentPhone === db.adminPhone);
+  }
+
+  function isManagerRole(){
+    if(isCloudConfigured()){
+      return !!(currentProfile && currentProfile.role === 'manager');
+    }
+    return !isBoss();
+  }
+
+  function canEditCritical(){
+    if(isCloudConfigured() && !currentProfile) return false;
+    return isBoss() || !db.restrictMgr;
+  }
+
+  function ensureWriteAccess(){
+    if(isCloudConfigured() && !isCloudAuthenticated()){
+      alert('当前已配置云端数据库，请先使用手机号与安全口令登录后再操作！');
+      openLoginSheet();
+      return false;
+    }
+    return true;
+  }
 
   function setSyncBadge(t, warn){
     const el = document.getElementById('sync-status');
     if(el){ el.innerText = t; el.style.color = warn ? 'var(--warn)' : 'var(--success)'; el.style.background = warn ? '#fff4e8' : '#e8ffea'; }
   }
 
+  function hydrateStateFromTables(payload){
+    const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
+    const roomsRaw = Array.isArray(payload.rooms) ? payload.rooms : [];
+    const contractsRaw = Array.isArray(payload.contracts) ? payload.contracts : [];
+    const billsRaw = Array.isArray(payload.bills) ? payload.bills : [];
+    const readingsRaw = Array.isArray(payload.meterReadings) ? payload.meterReadings : [];
+    const repairsRaw = Array.isArray(payload.repairs) ? payload.repairs : [];
+    const ledgerRaw = Array.isArray(payload.ledgerEntries) ? payload.ledgerEntries : [];
+    const profilesRaw = Array.isArray(payload.profiles) ? payload.profiles : [];
+    const assignmentsRaw = Array.isArray(payload.assignments) ? payload.assignments : [];
+
+    const bldgMap = new Map(buildings.map(b => [b.id, b]));
+    const activeContractByRoom = new Map();
+    contractsRaw.forEach(c => {
+      if(c.status === 'active' && !activeContractByRoom.has(c.room_id)){
+        activeContractByRoom.set(c.room_id, c);
+      }
+    });
+
+    const rooms = roomsRaw.map(r => {
+      const b = bldgMap.get(r.building_id);
+      const ct = activeContractByRoom.get(r.id);
+      const roomObj = {
+        id: r.id,
+        legacyId: r.legacy_id || '',
+        buildingId: r.building_id,
+        building: b ? b.name : '默认楼栋',
+        name: r.name,
+        floor: r.floor,
+        houseType: r.house_type || '',
+        rent: Number(r.rent ?? 1000),
+        waterPrice: Number(r.water_price ?? 5),
+        elecPrice: Number(r.elec_price ?? 1),
+        lastWater: Number(r.last_water ?? 0),
+        lastElec: Number(r.last_elec ?? 0),
+        status: r.status === 'rented' ? 'rented' : 'vacant',
+        vacantSince: r.vacant_since || '',
+        planCheckout: r.plan_checkout || '',
+        version: Number(r.version ?? 1)
+      };
+      if(ct){
+        roomObj.contractId = ct.id;
+        roomObj.contractNo = ct.contract_no || '';
+        roomObj.tenant = ct.tenant_name || '';
+        roomObj.phone = ct.tenant_phone || '';
+        roomObj.idCard = ct.id_card || '';
+        roomObj.idAddr = ct.id_addr || '';
+        roomObj.startDate = ct.start_date || '';
+        roomObj.endDate = ct.end_date || '';
+        roomObj.signDate = ct.sign_date || ct.start_date || '';
+        roomObj.cycle = ct.cycle || '月付 (每月收一次)';
+        roomObj.billMode = ct.bill_mode || '按起租日算';
+        roomObj.payDay = ct.pay_day || '账单开始前 当天';
+        roomObj.deposit = Number(ct.deposit ?? 0);
+        roomObj.extraFees = Array.isArray(ct.extra_fees) ? ct.extra_fees : [];
+      }
+      return roomObj;
+    });
+
+    const roomMap = new Map(rooms.map(r => [r.id, r]));
+    const pastTenants = contractsRaw
+      .filter(c => c.status === 'checked_out')
+      .map(c => {
+        const b = bldgMap.get(c.building_id);
+        const rm = roomMap.get(c.room_id);
+        return {
+          id: c.id,
+          buildingId: c.building_id,
+          building: b ? b.name : '默认楼栋',
+          name: rm ? rm.name : '历史房间',
+          tenant: c.tenant_name || '',
+          phone: c.tenant_phone || '',
+          checkoutDate: c.checkout_date || '',
+          settleNote: c.settle_note || ''
+        };
+      });
+
+    const bills = billsRaw.map(b => ({
+      id: b.id,
+      legacyId: b.legacy_id || '',
+      buildingId: b.building_id,
+      roomId: b.room_id,
+      contractId: b.contract_id || null,
+      building: (bldgMap.get(b.building_id) || {}).name || '',
+      roomName: b.room_name || ((roomMap.get(b.room_id) ? `${roomMap.get(b.room_id).building} - ${roomMap.get(b.room_id).name}` : '')),
+      tenant: b.tenant_name || '',
+      phone: b.tenant_phone || '',
+      month: b.bill_month || '',
+      date: b.bill_date || b.bill_month || '',
+      period: b.period || b.bill_month || '',
+      rent: Number(b.rent ?? 0),
+      deposit: Number(b.deposit ?? 0),
+      extraFee: Number(b.extra_fee ?? 0),
+      lastW: parseNum(b.last_water),
+      curW: parseNum(b.cur_water),
+      useW: Number(b.use_water ?? 0),
+      waterPrice: parseNum(b.water_price),
+      waterFee: Number(b.water_fee ?? 0),
+      lastE: parseNum(b.last_elec),
+      curE: parseNum(b.cur_elec),
+      useE: Number(b.use_elec ?? 0),
+      elecPrice: parseNum(b.elec_price),
+      elecFee: Number(b.elec_fee ?? 0),
+      total: formatMoney(b.total ?? 0),
+      paidAmount: Number(b.paid_amount ?? 0),
+      detail: b.detail || '',
+      status: b.status || 'unpaid'
+    }));
+
+    const repairs = repairsRaw.map(rp => ({
+      id: rp.id,
+      buildingId: rp.building_id || null,
+      roomId: rp.room_id || null,
+      roomName: rp.room_name || '',
+      type: rp.repair_type || '水电',
+      desc: rp.description || '',
+      status: rp.status === 'done' ? 'done' : 'pending',
+      date: rp.report_date || ''
+    }));
+
+    const ledger = ledgerRaw.map(l => ({
+      id: l.id,
+      buildingId: l.building_id || null,
+      billId: l.bill_id || null,
+      type: l.entry_type === 'out' ? 'out' : 'in',
+      cat: l.category || '',
+      title: l.title || '',
+      amount: Number(l.amount ?? 0),
+      date: l.entry_date || ''
+    }));
+    const expenses = ledger.filter(l => l.type === 'out').map(l => ({
+      id: l.id, cat: l.cat || l.title, amount: l.amount, date: l.date
+    }));
+
+    const landlordProfile = profilesRaw.find(p => p.role === 'landlord');
+    const managers = profilesRaw
+      .filter(p => p.role === 'manager' && p.is_active !== false)
+      .map(p => ({ id: p.id, name: p.display_name || '管房员', phone: p.phone }));
+
+    db = Object.assign(createEmptyDB(), {
+      adminPhone: landlordProfile ? landlordProfile.phone : (currentProfile && currentProfile.role === 'landlord' ? currentProfile.phone : ''),
+      restrictMgr: currentProfile ? !!currentProfile.restrict_manager : !!(landlordProfile && landlordProfile.restrict_manager),
+      buildings,
+      profiles: profilesRaw,
+      assignments: assignmentsRaw,
+      managers,
+      rooms,
+      contracts: contractsRaw,
+      pastTenants,
+      bills,
+      meterReadings: readingsRaw,
+      repairs,
+      expenses,
+      ledger,
+      scanCount: db.scanCount || 0
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  }
+
   async function syncFromCloud(manual){
-    const { url, key } = getSupabaseConfig();
-    if(!url || !key){
+    if(!isCloudConfigured()){
       setSyncBadge('⚙️ 未配置云端', true);
       refreshDashboard();
-      if(manual) alert('尚未配置本机云端连接，请前往底部【我的】->【云端同步配置】填写 Supabase URL 与 Anon Key。');
+      if(manual) alert('尚未配置本机云端连接，请前往底部【我的】->【云端同步配置】填写 Supabase URL 与可发布密钥。');
+      return;
+    }
+    if(!isCloudAuthenticated()){
+      setSyncBadge('🔒 请先登录', true);
+      refreshDashboard();
+      if(manual) openLoginSheet();
       return;
     }
     setSyncBadge('🔄 同步中', true);
     try {
-      const res = await fetch(`${url}/rest/v1/store?id=eq.1&select=data`, {
-        headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
-      });
-      if(!res.ok) throw new Error();
-      const rows = await res.json();
-      if(rows.length > 0 && rows[0].data){
-        db = Object.assign({adminPhone:'',restrictMgr:false,managers:[],rooms:[],pastTenants:[],bills:[],repairs:[],expenses:[],ledger:[],scanCount:0}, rows[0].data);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-      } else {
-        await saveDB();
+      const who = await sbRpc('gfb_whoami', {});
+      if(!who || !who.authenticated || !who.profile){
+        localStorage.removeItem(SESSION_TOKEN_KEY);
+        localStorage.removeItem(PROFILE_KEY);
+        currentProfile = null;
+        setSyncBadge('🔒 登录已过期', true);
+        refreshDashboard();
+        if(manual){
+          alert('登录状态已失效，请重新使用手机号与安全口令登录。');
+          openLoginSheet();
+        }
+        return;
       }
-      setSyncBadge('☁️ 已同步', false);
-      if(manual) alert('已从新加坡云数据库同步最新数据！');
+      currentProfile = who.profile;
+      currentPhone = who.profile.phone || currentPhone;
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(currentProfile));
+      localStorage.setItem(LOGIN_KEY, currentPhone);
+
+      const [
+        buildings, rooms, contracts, bills, meterReadings,
+        repairs, ledgerEntries, profiles, assignments
+      ] = await Promise.all([
+        sbRequest('buildings?select=*&order=created_at.asc'),
+        sbRequest('rooms?select=*&order=name.asc'),
+        sbRequest('contracts?select=*&order=created_at.desc'),
+        sbRequest('bills?select=*&order=created_at.desc'),
+        sbRequest('meter_readings?select=*&order=created_at.desc&limit=200'),
+        sbRequest('repairs?select=*&order=created_at.desc'),
+        sbRequest('ledger_entries?select=*&order=entry_date.desc,created_at.desc&limit=100'),
+        sbRequest(`profiles?select=${PROFILE_COLS}&order=created_at.asc`),
+        sbRequest('manager_assignments?select=*')
+      ]);
+
+      hydrateStateFromTables({
+        buildings, rooms, contracts, bills, meterReadings,
+        repairs, ledgerEntries, profiles, assignments
+      });
+
+      setSyncBadge('☁️ 多表已同步', false);
+      if(manual) alert(`同步成功！当前角色：${currentProfile.role === 'landlord' ? '主房东（全局权限）' : '管房员（已分配楼栋权限）'}。`);
       refreshDashboard();
     } catch(e) {
-      setSyncBadge('⚠️ 本地模式', true);
+      setSyncBadge('⚠️ 同步失败', true);
       refreshDashboard();
+      if(manual) alert('云端同步失败：' + (e.message || '请检查网络、密钥配置或是否已执行第二阶段 SQL 脚本'));
     }
   }
 
-  async function saveDB(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    refreshDashboard();
-    const { url, key } = getSupabaseConfig();
-    if(!url || !key){
-      setSyncBadge('💾 仅本地保存', true);
-      return;
+  async function cloudEnsureBuilding(name, defaults = {}){
+    const cleanName = String(name || '').trim() || '5栋';
+    const existing = (db.buildings || []).find(b => b.name === cleanName);
+    if(existing) return existing;
+    if(!isCloudAuthenticated()){
+      const localBldg = { id: 'BLDG_' + Date.now(), name: cleanName };
+      db.buildings = db.buildings || [];
+      db.buildings.push(localBldg);
+      return localBldg;
     }
-    setSyncBadge('🔄 保存中', true);
-    try {
-      const res = await fetch(`${url}/rest/v1/store`, {
-        method: 'POST',
-        headers: { 'apikey': key, 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
-        body: JSON.stringify({ id: 1, data: db })
-      });
-      if(res.ok) setSyncBadge('☁️ 已同步', false);
-      else throw new Error();
-    } catch(e) { setSyncBadge('⚠️ 待同步', true); }
+    const found = await sbRequest(`buildings?name=eq.${encodeURIComponent(cleanName)}&select=*&limit=1`);
+    if(Array.isArray(found) && found.length > 0){
+      db.buildings.push(found[0]);
+      return found[0];
+    }
+    const created = await sbRequest('buildings?select=*', {
+      method: 'POST',
+      headers: { 'Prefer': 'return=representation' },
+      body: {
+        name: cleanName,
+        default_rent: defaults.rent ?? 1000,
+        default_water_price: defaults.waterPrice ?? 5,
+        default_elec_price: defaults.elecPrice ?? 1,
+        created_by: currentProfile?.id || null
+      }
+    });
+    const row = Array.isArray(created) ? created[0] : created;
+    if(row) db.buildings.push(row);
+    return row;
   }
 
   function closeModule(){ document.getElementById('module-modal').classList.remove('show'); refreshDashboard(); }
@@ -313,7 +641,11 @@
   function closeAction(){ document.getElementById('action-sheet').classList.remove('show'); }
 
   function refreshDashboard(){
-    document.getElementById('role-tag').innerText = isBoss() ? '👑 主房东' : '👤 管房员';
+    const roleTagEl = document.getElementById('role-tag');
+    if(roleTagEl){
+      if(isCloudConfigured() && !currentProfile) roleTagEl.innerText = '🔒 未登录';
+      else roleTagEl.innerText = isBoss() ? '👑 主房东' : '👤 管房员';
+    }
     const total = db.rooms.length;
     const vacant = db.rooms.filter(r => r.status === 'vacant').length;
     let exp = 0; const today = new Date();
@@ -362,6 +694,9 @@
   function renderBuildingsPage(){
     document.getElementById('modal-title').innerText = '我的房源/楼栋';
     const bldgs = {};
+    (db.buildings || []).forEach(b => {
+      if(b && b.name && !bldgs[b.name]) bldgs[b.name] = { total:0, vacant:0 };
+    });
     db.rooms.forEach(r => {
       const b = r.building || '默认楼栋';
       if(!bldgs[b]) bldgs[b] = { total:0, vacant:0 };
@@ -370,7 +705,7 @@
     });
     const keys = Object.keys(bldgs);
     const bldgCards = keys.map(k => `
-      <div class="item-card" style="width:48%;display:inline-block;margin-right:2%;" onclick="activeBuilding='${k}';renderRoomsPage()">
+      <div class="item-card" style="width:48%;display:inline-block;margin-right:2%;" onclick="activeBuilding='${k.replace(/'/g,"\\'")}';renderRoomsPage()">
         <div style="font-size:16px;font-weight:700;margin-bottom:6px;">${k}</div>
         <div style="font-size:13px;color:var(--sub);">总房间数：${bldgs[k].total}</div>
         <div style="font-size:13px;color:var(--sub);margin-top:2px;">空房数：${bldgs[k].vacant}</div>
@@ -379,9 +714,9 @@
     document.getElementById('modal-body').innerHTML = `
       <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;background:var(--card);border-bottom:1px solid var(--border);">
         <span style="font-weight:700;">🏢 楼栋 (${keys.length})</span>
-        <button class="btn-sm primary" onclick="openAddRoomSheet()">+ 添加楼栋/房间</button>
+        ${canEditCritical() ? `<button class="btn-sm primary" onclick="openAddRoomSheet()">+ 添加楼栋/房间</button>` : ''}
       </div>
-      <div style="padding:12px 14px;">${bldgCards || '<div class="empty-tip">暂无楼栋，请点击右上角添加</div>'}</div>
+      <div style="padding:12px 14px;">${bldgCards || '<div class="empty-tip">暂无可见楼栋，请点击右上角添加或联系主房东分配楼栋</div>'}</div>
       ${db.rooms.length ? `<div style="padding:0 14px 10px;font-weight:700;font-size:14px;">全部房间一览</div><div id="rooms-list-box"></div>` : ''}`;
     if(db.rooms.length){ activeBuilding = 'ALL'; renderRoomsGridOnly(); }
   }
@@ -391,7 +726,7 @@
     document.getElementById('modal-body').innerHTML = `
       <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;background:var(--card);">
         <span style="font-weight:700;">🏢 ${activeBuilding==='ALL'?'全部楼栋':activeBuilding}</span>
-        <button class="btn-sm primary" onclick="openAddRoomSheet()">添加房间</button>
+        ${canEditCritical() ? `<button class="btn-sm primary" onclick="openAddRoomSheet()">添加房间</button>` : ''}
       </div>
       <div class="room-tabs" style="top:48px;">
         <div class="r-tab ${roomFilter==='ALL'?'active':''}" onclick="roomFilter='ALL';renderRoomsPage()">看全部房间</div>
@@ -433,11 +768,20 @@
   }
 
   function openAddRoomSheet(){
+    if(!ensureWriteAccess()) return;
+    if(!canEditCritical()) return alert('当前账号无添加房源权限！');
+    const assignedBldgs = (db.buildings || []).map(b => b.name);
+    if(!isBoss() && assignedBldgs.length === 0){
+      return alert('当前管房员尚未被分配楼栋，请联系主房东先在“我的”页面分配楼栋！');
+    }
+    const bldgInputHtml = isBoss()
+      ? `<input id="ar-bldg" class="cell-input" value="${activeBuilding!=='ALL'?activeBuilding:'5栋'}">`
+      : `<select id="ar-bldg" class="cell-select">${assignedBldgs.map(bn => `<option value="${bn}" ${bn===activeBuilding?'selected':''}>${bn}</option>`).join('')}</select>`;
     document.getElementById('action-sheet').classList.add('show');
     document.getElementById('action-title-text').innerText = '添加房源';
     document.getElementById('action-body').innerHTML = `
       <div class="cell-group" style="margin:0 0 12px;">
-        <div class="cell-row"><span class="cell-label">楼栋名称<span class="req">*</span></span><input id="ar-bldg" class="cell-input" value="${activeBuilding!=='ALL'?activeBuilding:'5栋'}"></div>
+        <div class="cell-row"><span class="cell-label">楼栋名称<span class="req">*</span></span>${bldgInputHtml}</div>
         <div class="cell-row"><span class="cell-label">预设月租金</span><input id="ar-rent" type="number" class="cell-input" value="1000"></div>
         <div class="cell-row"><span class="cell-label">水费(元/方)</span><input id="ar-wp" type="number" class="cell-input" value="5"></div>
         <div class="cell-row"><span class="cell-label">电费(元/度)</span><input id="ar-ep" type="number" class="cell-input" value="1"></div>
@@ -455,18 +799,48 @@
       <button class="btn btn-outline" onclick="bulkCreateRoomsExec()">⚡ 批量生成房间</button>`;
   }
 
-  function addSingleRoomExec(){
+  async function addSingleRoomExec(){
+    if(!ensureWriteAccess()) return;
     const b = document.getElementById('ar-bldg').value.trim()||'5栋';
     const n = document.getElementById('ar-single').value.trim();
     if(!n) return alert('请输入房间号！');
     const rent = parseNum(document.getElementById('ar-rent').value) ?? 1000;
     const wp = parseNum(document.getElementById('ar-wp').value) ?? 5;
     const ep = parseNum(document.getElementById('ar-ep').value) ?? 1;
-    db.rooms.push({ id:'RM_'+Date.now(), building:b, name:n, rent, waterPrice:wp, elecPrice:ep, lastWater:0, lastElec:0, vacantSince:new Date().toISOString().slice(0,10), status:'vacant' });
-    saveDB(); closeAction(); activeBuilding = b; renderRoomsPage();
+    const td = new Date().toISOString().slice(0,10);
+    try {
+      setSyncBadge('🔄 保存中', true);
+      const bldg = await cloudEnsureBuilding(b, { rent, waterPrice:wp, elecPrice:ep });
+      if(isCloudAuthenticated()){
+        const created = await sbRequest('rooms?select=*', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: {
+            building_id: bldg.id, name: n, rent, water_price: wp, elec_price: ep,
+            last_water: 0, last_elec: 0, status: 'vacant', vacant_since: td,
+            updated_by: currentProfile?.id || null
+          }
+        });
+        const row = Array.isArray(created) ? created[0] : created;
+        db.rooms.push({
+          id: row.id, buildingId: bldg.id, building: b, name: n, rent,
+          waterPrice: wp, elecPrice: ep, lastWater: 0, lastElec: 0,
+          vacantSince: td, status: 'vacant', version: row.version || 1
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        db.rooms.push({ id:'RM_'+Date.now(), buildingId:bldg.id, building:b, name:n, rent, waterPrice:wp, elecPrice:ep, lastWater:0, lastElec:0, vacantSince:td, status:'vacant', version:1 });
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      saveLocalCache(); closeAction(); activeBuilding = b; renderRoomsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('添加房间失败：' + (e.message || '请检查权限或房号是否重复'));
+    }
   }
 
-  function bulkCreateRoomsExec(){
+  async function bulkCreateRoomsExec(){
+    if(!ensureWriteAccess()) return;
     const b = document.getElementById('ar-bldg').value.trim()||'5栋';
     const f = parseNum(document.getElementById('ar-floors').value) ?? 1;
     const p = parseNum(document.getElementById('ar-per').value) ?? 8;
@@ -474,13 +848,46 @@
     const wp = parseNum(document.getElementById('ar-wp').value) ?? 5;
     const ep = parseNum(document.getElementById('ar-ep').value) ?? 1;
     const td = new Date().toISOString().slice(0,10);
-    for(let i=1; i<=f; i++){
-      for(let j=1; j<=p; j++){
-        const rmNo = `${i}${j<10?'0'+j:j}`;
-        db.rooms.push({ id:'RM_'+Date.now()+'_'+i+'_'+j, building:b, name:rmNo, floor:i, rent, waterPrice:wp, elecPrice:ep, lastWater:0, lastElec:0, vacantSince:td, status:'vacant' });
+    try {
+      setSyncBadge('🔄 批量保存中', true);
+      const bldg = await cloudEnsureBuilding(b, { rent, waterPrice:wp, elecPrice:ep });
+      const batch = [];
+      for(let i=1; i<=f; i++){
+        for(let j=1; j<=p; j++){
+          const rmNo = `${i}${j<10?'0'+j:j}`;
+          batch.push({
+            building_id: bldg.id, name: rmNo, floor: i, rent,
+            water_price: wp, elec_price: ep, last_water: 0, last_elec: 0,
+            status: 'vacant', vacant_since: td, updated_by: currentProfile?.id || null
+          });
+        }
       }
+      if(isCloudAuthenticated()){
+        const created = await sbRequest('rooms?on_conflict=building_id,name&select=*', {
+          method: 'POST',
+          headers: { 'Prefer': 'resolution=ignore-duplicates,return=representation' },
+          body: batch
+        });
+        (created || []).forEach(row => {
+          db.rooms.push({
+            id: row.id, buildingId: bldg.id, building: b, name: row.name, floor: row.floor,
+            rent: Number(row.rent), waterPrice: Number(row.water_price), elecPrice: Number(row.elec_price),
+            lastWater: Number(row.last_water ?? 0), lastElec: Number(row.last_elec ?? 0),
+            vacantSince: row.vacant_since || td, status: row.status || 'vacant', version: row.version || 1
+          });
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        batch.forEach((item, idx) => {
+          db.rooms.push({ id:'RM_'+Date.now()+'_'+idx, buildingId:bldg.id, building:b, name:item.name, floor:item.floor, rent, waterPrice:wp, elecPrice:ep, lastWater:0, lastElec:0, vacantSince:td, status:'vacant', version:1 });
+        });
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      saveLocalCache(); closeAction(); activeBuilding = b; renderRoomsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('批量生成房间失败：' + (e.message || '请检查权限'));
     }
-    saveDB(); closeAction(); activeBuilding = b; renderRoomsPage();
   }
 
   // 四级房间详情页 (4个横向Tab切换)
@@ -563,27 +970,75 @@
     }
   }
 
-  function saveRoomBasic(){
-    const r = db.rooms[activeRoomIdx];
-    r.rent = parseNum(document.getElementById('rt-rent').value) ?? 1000;
-    r.waterPrice = parseNum(document.getElementById('rt-wp').value) ?? 5;
-    r.elecPrice = parseNum(document.getElementById('rt-ep').value) ?? 1;
-    r.lastWater = parseNum(document.getElementById('rt-lw').value) ?? 0;
-    r.lastElec = parseNum(document.getElementById('rt-le').value) ?? 0;
-    saveDB(); alert('房间信息已保存！'); switchRoomTab('basic', document.querySelectorAll('#lv3-tabs .r-tab')[0]);
+  async function saveRoomBasic(){
+    if(!ensureWriteAccess()) return;
+    const r = db.rooms[activeRoomIdx]; if(!r) return;
+    const rent = parseNum(document.getElementById('rt-rent').value) ?? 1000;
+    const wp = parseNum(document.getElementById('rt-wp').value) ?? 5;
+    const ep = parseNum(document.getElementById('rt-ep').value) ?? 1;
+    const lw = parseNum(document.getElementById('rt-lw').value) ?? 0;
+    const le = parseNum(document.getElementById('rt-le').value) ?? 0;
+    const nextVer = (Number(r.version) || 1) + 1;
+    try {
+      setSyncBadge('🔄 保存中', true);
+      if(isCloudAuthenticated()){
+        await sbRequest(`rooms?id=eq.${encodeURIComponent(r.id)}`, {
+          method: 'PATCH',
+          body: {
+            rent, water_price: wp, elec_price: ep,
+            last_water: lw, last_elec: le, version: nextVer,
+            updated_by: currentProfile?.id || null
+          }
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      r.rent = rent; r.waterPrice = wp; r.elecPrice = ep; r.lastWater = lw; r.lastElec = le; r.version = nextVer;
+      saveLocalCache(); alert('房间信息已增量保存！'); switchRoomTab('basic', document.querySelectorAll('#lv3-tabs .r-tab')[0]);
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('保存房间信息失败：' + (e.message || '无操作权限'));
+    }
   }
 
-  function deleteRoom(){
+  async function deleteRoom(){
+    if(!ensureWriteAccess()) return;
     if(!canEditCritical()) return alert('当前账号无删除房间权限！');
+    const r = db.rooms[activeRoomIdx]; if(!r) return;
     if(!confirm('确定要删除该房间吗？')) return;
-    db.rooms.splice(activeRoomIdx, 1);
-    saveDB(); closeLv3(); renderBuildingsPage();
+    try {
+      setSyncBadge('🔄 删除中', true);
+      if(isCloudAuthenticated()){
+        await sbRequest(`rooms?id=eq.${encodeURIComponent(r.id)}`, { method: 'DELETE' });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      db.rooms.splice(activeRoomIdx, 1);
+      saveLocalCache(); closeLv3(); renderBuildingsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 删除失败', true);
+      alert('删除房间失败：' + (e.message || '数据库 RLS 拒绝操作'));
+    }
   }
 
-  function setPlanCheckoutDate(){
-    const r = db.rooms[activeRoomIdx];
+  async function setPlanCheckoutDate(){
+    if(!ensureWriteAccess()) return;
+    const r = db.rooms[activeRoomIdx]; if(!r) return;
     const d = prompt('请输入预计退租日期 (YYYY-MM-DD)：', r.endDate||'');
-    if(d){ r.planCheckout = d; saveDB(); alert('已记录预计退租日：'+d); }
+    if(!d) return;
+    try {
+      if(isCloudAuthenticated()){
+        await sbRequest(`rooms?id=eq.${encodeURIComponent(r.id)}`, {
+          method: 'PATCH',
+          body: { plan_checkout: d, updated_by: currentProfile?.id || null }
+        });
+      }
+      r.planCheckout = d; saveLocalCache(); alert('已记录预计退租日：'+d);
+    } catch(e) {
+      alert('保存预计退租日期失败：' + (e.message || '无操作权限'));
+    }
   }
 
   // --- 2. 租客/合同模块 (完整补齐) ---
@@ -663,25 +1118,69 @@
       </div>`;
   }
 
-  function voidContract(idx){
+  async function voidContract(idx){
+    if(!ensureWriteAccess()) return;
     if(!canEditCritical()) return alert('当前账号无作废合同权限！');
     if(!confirm('如果租约信息填错，可作废合同并将房间恢复为空房。确定作废吗？')) return;
-    const r = db.rooms[idx];
-    db.bills = db.bills.filter(b => b.roomId !== r.id);
-    r.status = 'vacant'; delete r.tenant; delete r.phone; delete r.idCard; delete r.idAddr;
-    saveDB(); closeAction(); closeLv3(); renderBuildingsPage();
+    const r = db.rooms[idx]; if(!r) return;
+    try {
+      setSyncBadge('🔄 处理中', true);
+      if(isCloudAuthenticated()){
+        if(r.contractId){
+          await sbRequest(`contracts?id=eq.${encodeURIComponent(r.contractId)}`, {
+            method: 'PATCH',
+            body: { status: 'voided' }
+          });
+          await sbRequest(`bills?contract_id=eq.${encodeURIComponent(r.contractId)}&status=neq.paid`, {
+            method: 'DELETE'
+          });
+        } else {
+          await sbRequest(`bills?room_id=eq.${encodeURIComponent(r.id)}&status=neq.paid`, {
+            method: 'DELETE'
+          });
+        }
+        await sbRequest(`rooms?id=eq.${encodeURIComponent(r.id)}`, {
+          method: 'PATCH',
+          body: { status: 'vacant', plan_checkout: null, updated_by: currentProfile?.id || null }
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      db.bills = db.bills.filter(b => !(b.roomId === r.id && b.status !== 'paid'));
+      r.status = 'vacant'; delete r.contractId; delete r.tenant; delete r.phone; delete r.idCard; delete r.idAddr;
+      saveLocalCache(); closeAction(); closeLv3(); renderBuildingsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 操作失败', true);
+      alert('作废合同失败：' + (e.message || '无操作权限'));
+    }
   }
 
-  function renewContract(idx){
-    const r = db.rooms[idx];
+  async function renewContract(idx){
+    if(!ensureWriteAccess()) return;
+    const r = db.rooms[idx]; if(!r) return;
     const ne = prompt('请输入续租后的新结束日期 (YYYY-MM-DD)：', r.endDate);
-    if(ne){ r.endDate = ne; saveDB(); closeAction(); alert('续租成功！'); }
+    if(!ne) return;
+    try {
+      setSyncBadge('🔄 保存中', true);
+      if(isCloudAuthenticated() && r.contractId){
+        await sbRequest(`contracts?id=eq.${encodeURIComponent(r.contractId)}`, {
+          method: 'PATCH',
+          body: { end_date: ne }
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      }
+      r.endDate = ne; saveLocalCache(); closeAction(); alert('续租成功！');
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('续租失败：' + (e.message || '无操作权限'));
+    }
   }
 
   // --- 3. 招租二维码 ---
   function renderRecruitPage(){
     document.getElementById('modal-title').innerText = '招租';
-    db.scanCount = (db.scanCount||0) + 1; saveDB();
+    db.scanCount = (db.scanCount||0) + 1; saveLocalCache();
     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(window.location.href)}`;
     document.getElementById('modal-body').innerHTML = `
       <div style="padding:14px;font-size:13px;color:#444;line-height:1.5;">系统为您生成专属招租二维码，可发给中介或打印张贴。租客扫码即可实时看到您的所有空房和快到期房间！</div>
@@ -701,9 +1200,10 @@
     document.getElementById('modal-title').innerText = '租客签约';
     const vacants = db.rooms.filter(r => r.status === 'vacant');
     if(!vacants.length){
-      document.getElementById('modal-body').innerHTML = `<div class="empty-tip">当前没有空房可签约<br><br><button class="btn" style="width:180px;" onclick="openModule('rooms','ALL');openAddRoomSheet()">+ 先去添加房间</button></div>`;
+      document.getElementById('modal-body').innerHTML = `<div class="empty-tip">当前没有空房可签约<br><br>${canEditCritical()?`<button class="btn" style="width:180px;" onclick="openModule('rooms','ALL');openAddRoomSheet()">+ 先去添加房间</button>`:''}</div>`;
       return;
     }
+    tempSignFees = [];
     const f = vacants[0];
     const td = new Date().toISOString().slice(0,10);
     const nd = new Date(new Date().setFullYear(new Date().getFullYear()+1)).toISOString().slice(0,10);
@@ -726,10 +1226,10 @@
       </div>
       <div class="section-title" style="padding:4px 14px 0;">费用项目：</div>
       <div class="cell-group">
-        <div class="cell-row"><span class="cell-label">租金<span class="req">*</span></span><input id="s-rent" type="number" class="cell-input" value="${f.rent||1000}"><span style="margin-left:6px;font-size:13px;">元/月</span></div>
-        <div class="cell-row"><span class="cell-label">押金<span class="req">*</span></span><input id="s-dep" type="number" class="cell-input" value="${f.rent||1000}"><span style="margin-left:6px;font-size:13px;">元</span></div>
-        <div class="cell-row"><span class="cell-label">水<span class="req">*</span></span><input id="s-wp" type="number" class="cell-input" value="${f.waterPrice||8}"><span style="margin-left:6px;font-size:13px;">元/立方</span></div>
-        <div class="cell-row"><span class="cell-label">电<span class="req">*</span></span><input id="s-ep" type="number" class="cell-input" value="${f.elecPrice||1}"><span style="margin-left:6px;font-size:13px;">元/度</span></div>
+        <div class="cell-row"><span class="cell-label">租金<span class="req">*</span></span><input id="s-rent" type="number" class="cell-input" value="${parseNum(f.rent) ?? 1000}"><span style="margin-left:6px;font-size:13px;">元/月</span></div>
+        <div class="cell-row"><span class="cell-label">押金<span class="req">*</span></span><input id="s-dep" type="number" class="cell-input" value="${parseNum(f.rent) ?? 1000}"><span style="margin-left:6px;font-size:13px;">元</span></div>
+        <div class="cell-row"><span class="cell-label">水<span class="req">*</span></span><input id="s-wp" type="number" class="cell-input" value="${parseNum(f.waterPrice) ?? 5}"><span style="margin-left:6px;font-size:13px;">元/立方</span></div>
+        <div class="cell-row"><span class="cell-label">电<span class="req">*</span></span><input id="s-ep" type="number" class="cell-input" value="${parseNum(f.elecPrice) ?? 1}"><span style="margin-left:6px;font-size:13px;">元/度</span></div>
         <div id="s-extra-box"></div>
         <div class="cell-row" style="justify-content:flex-end;"><span style="color:var(--primary);font-size:13px;cursor:pointer;" onclick="openFeeSelector()">添加/删除费用项目</span></div>
       </div>
@@ -739,10 +1239,10 @@
   function syncSignUI(){
     const rm = db.rooms.find(r => r.id === document.getElementById('s-rm').value);
     if(rm){
-      document.getElementById('s-rent').value = rm.rent||1000;
-      document.getElementById('s-dep').value = rm.rent||1000;
-      document.getElementById('s-wp').value = rm.waterPrice||8;
-      document.getElementById('s-ep').value = rm.elecPrice||1;
+      document.getElementById('s-rent').value = parseNum(rm.rent) ?? 1000;
+      document.getElementById('s-dep').value = parseNum(rm.rent) ?? 1000;
+      document.getElementById('s-wp').value = parseNum(rm.waterPrice) ?? 5;
+      document.getElementById('s-ep').value = parseNum(rm.elecPrice) ?? 1;
     }
   }
 
@@ -761,7 +1261,7 @@
     const idx = tempSignFees.findIndex(x => x.name === name);
     if(idx >= 0) tempSignFees.splice(idx, 1);
     else {
-      const amt = Number(prompt(`请输入【${name}】每月金额（元）：`, '30')||30);
+      const amt = parseNum(prompt(`请输入【${name}】每月金额（元）：`, '30')) ?? 30;
       tempSignFees.push({ name, amt });
     }
     openFeeSelector();
@@ -772,51 +1272,115 @@
     if(box) box.innerHTML = tempSignFees.map(f => `<div class="cell-row"><span class="cell-label">${f.name}</span><span>¥${f.amt} 元/月</span></div>`).join('');
   }
 
-  function submitSign(){
+  async function submitSign(){
+    if(!ensureWriteAccess()) return;
     const nm = document.getElementById('s-name').value.trim(), ph = document.getElementById('s-phone').value.trim();
     if(!nm || !ph) return alert('请填写租客姓名与手机号！');
     const rm = db.rooms.find(r => r.id === document.getElementById('s-rm').value);
+    if(!rm) return alert('未找到所选房间！');
     const start = document.getElementById('s-start').value, end = document.getElementById('s-end').value;
-    rm.status = 'rented'; rm.tenant = nm; rm.phone = ph;
-    rm.idCard = document.getElementById('s-id').value.trim();
-    rm.idAddr = document.getElementById('s-addr').value.trim();
-    rm.startDate = start; rm.endDate = end;
-    rm.cycle = document.getElementById('s-cycle').value;
-    rm.billMode = document.getElementById('s-bmode').value;
-    rm.rent = Number(document.getElementById('s-rent').value||1000);
-    rm.deposit = Number(document.getElementById('s-dep').value||1000);
-    rm.waterPrice = Number(document.getElementById('s-wp').value||8);
-    rm.elecPrice = Number(document.getElementById('s-ep').value||1);
-    rm.extraFees = [...tempSignFees];
-    rm.contractNo = new Date().toISOString().slice(0,10).replace(/-/g,'') + '001';
-    rm.signDate = new Date().toISOString().slice(0,10);
+    const idCard = document.getElementById('s-id').value.trim();
+    const idAddr = document.getElementById('s-addr').value.trim();
+    const cycle = document.getElementById('s-cycle').value;
+    const billMode = document.getElementById('s-bmode').value;
+    const payDay = document.getElementById('s-payday').value;
+    const rent = parseNum(document.getElementById('s-rent').value) ?? 1000;
+    const deposit = parseNum(document.getElementById('s-dep').value) ?? 0;
+    const waterPrice = parseNum(document.getElementById('s-wp').value) ?? 5;
+    const elecPrice = parseNum(document.getElementById('s-ep').value) ?? 1;
+    const extraFees = [...tempSignFees];
+    const contractNo = new Date().toISOString().slice(0,10).replace(/-/g,'') + String(Date.now()).slice(-3);
+    const signDate = new Date().toISOString().slice(0,10);
+    const exSum = extraFees.reduce((s,f)=>s + Number(f.amt ?? f.amount ?? 0), 0);
+    const totalNum = Number((rent + deposit + exSum).toFixed(2));
+    const roomNameFull = `${rm.building} - ${rm.name}`;
+    const billPeriod = `${start} 至 ${start.slice(0,7)}-30`;
 
-    const exSum = rm.extraFees.reduce((s,f)=>s+f.amt,0);
-    // 生成首期账单 (含押金)
-    db.bills.unshift({
-      id:'BL_'+Date.now(), roomId:rm.id, building:rm.building, roomName:`${rm.building} - ${rm.name}`,
-      tenant:rm.tenant, phone:rm.phone, month:start.slice(0,7), date:start,
-      period:`${start} 至 ${start.slice(0,7)}-30`,
-      rent:rm.rent, deposit:rm.deposit, waterFee:0, elecFee:0, extraFee:exSum,
-      total:(rm.rent + rm.deposit + exSum).toFixed(0), paidAmount:0,
-      detail:`首期租金¥${rm.rent}+押金¥${rm.deposit}`, status:'unmetered'
-    });
-    saveDB();
-    const rIdx = db.rooms.findIndex(x => x.id === rm.id);
-    // 显示原版同款“合同保存成功”引导页
-    document.getElementById('modal-body').innerHTML = `
-      <div style="padding:40px 20px;text-align:center;background:var(--card);">
-        <div style="width:64px;height:64px;border-radius:50%;border:3px solid var(--primary);color:var(--primary);font-size:32px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">✓</div>
-        <div style="font-size:20px;font-weight:700;margin-bottom:16px;">合同保存成功</div>
-        <div style="font-size:14px;color:#555;line-height:1.6;text-align:left;margin-bottom:24px;">
-          系统将根据合同约定内容，定期自动生成账单。您可前往“工作台 -> 收租/账单”进行查看并处理。<br><br>
-          首期账单现已生成，请点击下方“查看租客账单”按钮核对并收款。
-        </div>
-        <div style="display:flex;gap:12px;">
-          <button class="btn" style="flex:1" onclick="openContractDetail(${rIdx})">查看合同</button>
-          <button class="btn" style="flex:1" onclick="openModule('bills','ALL')">查看租客账单</button>
-        </div>
-      </div>`;
+    try {
+      setSyncBadge('🔄 保存合同中', true);
+      let contractId = 'CT_' + Date.now();
+      let billId = 'BL_' + Date.now();
+      if(isCloudAuthenticated()){
+        const cRows = await sbRequest('contracts?select=*', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: {
+            building_id: rm.buildingId, room_id: rm.id, contract_no: contractNo,
+            tenant_name: nm, tenant_phone: ph, id_card: idCard, id_addr: idAddr,
+            start_date: start || null, end_date: end || null, sign_date: signDate,
+            cycle, bill_mode: billMode, pay_day: payDay,
+            rent, deposit, water_price: waterPrice, elec_price: elecPrice,
+            extra_fees: extraFees, status: 'active', created_by: currentProfile?.id || null
+          }
+        });
+        const ctRow = Array.isArray(cRows) ? cRows[0] : cRows;
+        if(ctRow && ctRow.id) contractId = ctRow.id;
+
+        await sbRequest(`rooms?id=eq.${encodeURIComponent(rm.id)}`, {
+          method: 'PATCH',
+          body: {
+            status: 'rented', rent, water_price: waterPrice, elec_price: elecPrice,
+            updated_by: currentProfile?.id || null
+          }
+        });
+
+        const bRows = await sbRequest('bills?select=*', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: {
+            building_id: rm.buildingId, room_id: rm.id, contract_id: contractId,
+            room_name: roomNameFull, tenant_name: nm, tenant_phone: ph,
+            bill_month: start.slice(0,7), bill_date: start || signDate, period: billPeriod,
+            rent, deposit, extra_fee: exSum,
+            last_water: parseNum(rm.lastWater) ?? 0, cur_water: null, use_water: 0, water_price: waterPrice, water_fee: 0,
+            last_elec: parseNum(rm.lastElec) ?? 0, cur_elec: null, use_elec: 0, elec_price: elecPrice, elec_fee: 0,
+            total: totalNum, paid_amount: 0,
+            detail: `首期租金¥${rent}+押金¥${deposit}`, status: 'unmetered',
+            updated_by: currentProfile?.id || null
+          }
+        });
+        const bRow = Array.isArray(bRows) ? bRows[0] : bRows;
+        if(bRow && bRow.id) billId = bRow.id;
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+
+      rm.status = 'rented'; rm.contractId = contractId; rm.tenant = nm; rm.phone = ph;
+      rm.idCard = idCard; rm.idAddr = idAddr; rm.startDate = start; rm.endDate = end;
+      rm.cycle = cycle; rm.billMode = billMode; rm.payDay = payDay;
+      rm.rent = rent; rm.deposit = deposit; rm.waterPrice = waterPrice; rm.elecPrice = elecPrice;
+      rm.extraFees = extraFees; rm.contractNo = contractNo; rm.signDate = signDate;
+
+      db.bills.unshift({
+        id: billId, buildingId: rm.buildingId, roomId: rm.id, contractId,
+        building: rm.building, roomName: roomNameFull,
+        tenant: nm, phone: ph, month: start.slice(0,7), date: start, period: billPeriod,
+        rent, deposit, extraFee: exSum,
+        lastW: parseNum(rm.lastWater) ?? 0, curW: null, useW: 0, waterPrice, waterFee: 0,
+        lastE: parseNum(rm.lastElec) ?? 0, curE: null, useE: 0, elecPrice, elecFee: 0,
+        total: formatMoney(totalNum), paidAmount: 0,
+        detail: `首期租金¥${rent}+押金¥${deposit}`, status: 'unmetered'
+      });
+      saveLocalCache();
+
+      const rIdx = db.rooms.findIndex(x => x.id === rm.id);
+      document.getElementById('modal-body').innerHTML = `
+        <div style="padding:40px 20px;text-align:center;background:var(--card);">
+          <div style="width:64px;height:64px;border-radius:50%;border:3px solid var(--primary);color:var(--primary);font-size:32px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">✓</div>
+          <div style="font-size:20px;font-weight:700;margin-bottom:16px;">合同保存成功</div>
+          <div style="font-size:14px;color:#555;line-height:1.6;text-align:left;margin-bottom:24px;">
+            系统已将合同与首期账单按独立记录写入数据库。您可前往“工作台 -> 收租/账单”进行抄表与收款。
+          </div>
+          <div style="display:flex;gap:12px;">
+            <button class="btn" style="flex:1" onclick="openContractDetail(${rIdx})">查看合同</button>
+            <button class="btn" style="flex:1" onclick="openModule('bills','ALL')">查看租客账单</button>
+          </div>
+        </div>`;
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('签约保存失败：' + (e.message || '请检查权限'));
+    }
   }
 
   // --- 5. 收租/账单 (含筛选、抄表自动计算、表格式收据、确认收款) ---
@@ -932,8 +1496,10 @@
     document.getElementById('am-total').innerText = '¥' + formatMoney(rent + dep + wf + ef + extraFee);
   }
 
-  function saveMeterForm(bIdx, andPay){
-    const b = db.bills[bIdx], r = db.rooms.find(x => x.id === b.roomId);
+  async function saveMeterForm(bIdx, andPay){
+    if(!ensureWriteAccess()) return;
+    const b = db.bills[bIdx]; if(!b) return;
+    const r = db.rooms.find(x => x.id === b.roomId);
     const rent = parseNum(document.getElementById('am-rent')?.value) ?? 0;
     const dep = parseNum(document.getElementById('am-dep')?.value) ?? 0;
     const extraFee = parseNum(b.extraFee) ?? 0;
@@ -943,29 +1509,108 @@
     const ce = parseNum(document.getElementById('am-e')?.value);
     const uw = cw !== null ? Math.max(0, Number((cw - lastW).toFixed(2))) : 0;
     const ue = ce !== null ? Math.max(0, Number((ce - lastE).toFixed(2))) : 0;
-    const wp = parseNum(r?.waterPrice) ?? 8;
-    const ep = parseNum(r?.elecPrice) ?? 1;
+    const wp = parseNum(r?.waterPrice) ?? parseNum(b.waterPrice) ?? 8;
+    const ep = parseNum(r?.elecPrice) ?? parseNum(b.elecPrice) ?? 1;
     const wf = Number((uw * wp).toFixed(2));
     const ef = Number((ue * ep).toFixed(2));
-    b.lastW = lastW; b.curW = cw; b.useW = uw; b.waterFee = wf;
-    b.lastE = lastE; b.curE = ce; b.useE = ue; b.elecFee = ef;
-    if(r){
-      if(cw !== null) r.lastWater = cw;
-      if(ce !== null) r.lastElec = ce;
-    }
-    b.rent = rent; b.deposit = dep;
-    b.total = formatMoney(rent + dep + wf + ef + extraFee);
-    b.status = 'unpaid';
+    const totalNum = Number((rent + dep + wf + ef + extraFee).toFixed(2));
+    const totalStr = formatMoney(totalNum);
+    const todayStr = new Date().toISOString().slice(0,10);
 
+    let nextStatus = 'unpaid';
+    let paidAmt = 0;
+    let shouldRecordPaid = false;
     if(andPay){
       if(confirm('如果已经收到租客的租金，请点“确定”，系统自动将该账单状态改为“已收租”。')){
-        b.status = 'paid'; b.paidAmount = b.total;
-        db.ledger.unshift({ type:'in', title:`[收租] ${b.roomName} (${b.tenant})`, amount:Number(b.total), date:new Date().toISOString().slice(0,10) });
+        nextStatus = 'paid';
+        paidAmt = totalNum;
+        shouldRecordPaid = true;
       }
-    } else {
-      alert('保存成功！');
     }
-    saveDB(); closeLv3(); renderBillsPage();
+
+    try {
+      setSyncBadge('🔄 保存账单中', true);
+      if(isCloudAuthenticated()){
+        await sbRequest(`bills?id=eq.${encodeURIComponent(b.id)}`, {
+          method: 'PATCH',
+          body: {
+            rent, deposit: dep, extra_fee: extraFee,
+            last_water: lastW, cur_water: cw, use_water: uw, water_price: wp, water_fee: wf,
+            last_elec: lastE, cur_elec: ce, use_elec: ue, elec_price: ep, elec_fee: ef,
+            total: totalNum, paid_amount: paidAmt,
+            paid_at: shouldRecordPaid ? new Date().toISOString() : null,
+            status: nextStatus, updated_by: currentProfile?.id || null
+          }
+        });
+
+        if((cw !== null || ce !== null) && r){
+          await sbRequest('meter_readings?on_conflict=legacy_id', {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=merge-duplicates' },
+            body: {
+              legacy_id: 'MR_BILL_' + b.id,
+              building_id: r.buildingId || b.buildingId,
+              room_id: r.id,
+              bill_id: b.id,
+              reading_month: b.month || todayStr.slice(0,7),
+              reading_date: todayStr,
+              prev_water: lastW, curr_water: cw, usage_water: uw, water_price: wp, water_fee: wf,
+              prev_elec: lastE, curr_elec: ce, usage_elec: ue, elec_price: ep, elec_fee: ef,
+              recorded_by: currentProfile?.id || null
+            }
+          });
+        }
+
+        if(r && (cw !== null || ce !== null)){
+          const roomPatch = { updated_by: currentProfile?.id || null };
+          if(cw !== null) roomPatch.last_water = cw;
+          if(ce !== null) roomPatch.last_elec = ce;
+          await sbRequest(`rooms?id=eq.${encodeURIComponent(r.id)}`, {
+            method: 'PATCH',
+            body: roomPatch
+          });
+        }
+
+        if(shouldRecordPaid){
+          await sbRequest('ledger_entries', {
+            method: 'POST',
+            body: {
+              building_id: r?.buildingId || b.buildingId || null,
+              bill_id: b.id,
+              entry_type: 'in',
+              category: '收租',
+              title: `[收租] ${b.roomName} (${b.tenant})`,
+              amount: totalNum,
+              entry_date: todayStr,
+              created_by: currentProfile?.id || null
+            }
+          });
+        }
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+
+      b.lastW = lastW; b.curW = cw; b.useW = uw; b.waterPrice = wp; b.waterFee = wf;
+      b.lastE = lastE; b.curE = ce; b.useE = ue; b.elecPrice = ep; b.elecFee = ef;
+      if(r){
+        if(cw !== null) r.lastWater = cw;
+        if(ce !== null) r.lastElec = ce;
+      }
+      b.rent = rent; b.deposit = dep;
+      b.total = totalStr;
+      b.status = nextStatus;
+      if(shouldRecordPaid){
+        b.paidAmount = totalStr;
+        db.ledger.unshift({ type:'in', buildingId: r?.buildingId || b.buildingId || null, title:`[收租] ${b.roomName} (${b.tenant})`, amount: totalNum, date: todayStr });
+      } else if(!andPay) {
+        alert('保存成功！');
+      }
+      saveLocalCache(); closeLv3(); renderBillsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('保存账单失败：' + (e.message || '无操作权限'));
+    }
   }
 
   // 原版表格式【房租收据】生成
@@ -1025,9 +1670,11 @@
       </div>`;
   }
 
-  function submitBulkMeter(){
+  async function submitBulkMeter(){
+    if(!ensureWriteAccess()) return;
     const rented = db.rooms.filter(r => r.status === 'rented'), curM = new Date().toISOString().slice(0,7), td = new Date().toISOString().slice(0,10);
-    rented.forEach((rm, i) => {
+    if(!rented.length) return;
+    const prepared = rented.map((rm, i) => {
       const prevW = parseNum(rm.lastWater) ?? 0;
       const prevE = parseNum(rm.lastElec) ?? 0;
       const cw = parseNum(document.getElementById(`bm-w-${i}`).value) ?? prevW;
@@ -1039,17 +1686,76 @@
       const wf = Number((uw * wp).toFixed(2));
       const ef = Number((ue * ep).toFixed(2));
       const exSum = (rm.extraFees||[]).reduce((s,f)=>s + Number(f.amt ?? f.amount ?? 0), 0);
-      rm.lastWater = cw; rm.lastElec = ce;
-      db.bills.unshift({
-        id:'BL_'+Date.now()+'_'+i, roomId:rm.id, building:rm.building, roomName:`${rm.building} - ${rm.name}`,
-        tenant:rm.tenant, phone:rm.phone, month:curM, date:td, period:`${curM}-01 至 ${curM}-30`,
-        rent:rm.rent, deposit:0, extraFee:exSum,
-        lastW:prevW, curW:cw, useW:uw, waterFee:wf,
-        lastE:prevE, curE:ce, useE:ue, elecFee:ef,
-        total:formatMoney(Number(rm.rent||0) + wf + ef + exSum), status:'unpaid'
-      });
+      const totalNum = Number((Number(rm.rent||0) + wf + ef + exSum).toFixed(2));
+      return { rm, prevW, prevE, cw, ce, uw, ue, wp, ep, wf, ef, exSum, totalNum };
     });
-    saveDB(); openModule('bills','ALL'); alert(`已批量生成 ${rented.length} 份账单！`);
+
+    try {
+      setSyncBadge('🔄 批量抄表保存中', true);
+      if(isCloudAuthenticated()){
+        const billPayloads = prepared.map(p => ({
+          building_id: p.rm.buildingId, room_id: p.rm.id, contract_id: p.rm.contractId || null,
+          room_name: `${p.rm.building} - ${p.rm.name}`, tenant_name: p.rm.tenant || '', tenant_phone: p.rm.phone || '',
+          bill_month: curM, bill_date: td, period: `${curM}-01 至 ${curM}-30`,
+          rent: Number(p.rm.rent||0), deposit: 0, extra_fee: p.exSum,
+          last_water: p.prevW, cur_water: p.cw, use_water: p.uw, water_price: p.wp, water_fee: p.wf,
+          last_elec: p.prevE, cur_elec: p.ce, use_elec: p.ue, elec_price: p.ep, elec_fee: p.ef,
+          total: p.totalNum, paid_amount: 0, status: 'unpaid', updated_by: currentProfile?.id || null
+        }));
+        const createdBills = await sbRequest('bills?select=*', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: billPayloads
+        });
+        const readingPayloads = prepared.map((p, idx) => ({
+          building_id: p.rm.buildingId, room_id: p.rm.id,
+          bill_id: createdBills[idx]?.id || null,
+          reading_month: curM, reading_date: td,
+          prev_water: p.prevW, curr_water: p.cw, usage_water: p.uw, water_price: p.wp, water_fee: p.wf,
+          prev_elec: p.prevE, curr_elec: p.ce, usage_elec: p.ue, elec_price: p.ep, elec_fee: p.ef,
+          recorded_by: currentProfile?.id || null
+        }));
+        await sbRequest('meter_readings', { method: 'POST', body: readingPayloads });
+        await Promise.all(prepared.map(p =>
+          sbRequest(`rooms?id=eq.${encodeURIComponent(p.rm.id)}`, {
+            method: 'PATCH',
+            body: { last_water: p.cw, last_elec: p.ce, updated_by: currentProfile?.id || null }
+          })
+        ));
+        prepared.forEach((p, idx) => {
+          p.rm.lastWater = p.cw; p.rm.lastElec = p.ce;
+          db.bills.unshift({
+            id: createdBills[idx]?.id || ('BL_' + Date.now() + '_' + idx),
+            buildingId: p.rm.buildingId, roomId: p.rm.id, contractId: p.rm.contractId || null,
+            building: p.rm.building, roomName: `${p.rm.building} - ${p.rm.name}`,
+            tenant: p.rm.tenant, phone: p.rm.phone, month: curM, date: td, period: `${curM}-01 至 ${curM}-30`,
+            rent: p.rm.rent, deposit: 0, extraFee: p.exSum,
+            lastW: p.prevW, curW: p.cw, useW: p.uw, waterPrice: p.wp, waterFee: p.wf,
+            lastE: p.prevE, curE: p.ce, useE: p.ue, elecPrice: p.ep, elecFee: p.ef,
+            total: formatMoney(p.totalNum), status: 'unpaid'
+          });
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        prepared.forEach((p, i) => {
+          p.rm.lastWater = p.cw; p.rm.lastElec = p.ce;
+          db.bills.unshift({
+            id:'BL_'+Date.now()+'_'+i, buildingId: p.rm.buildingId, roomId:p.rm.id,
+            building:p.rm.building, roomName:`${p.rm.building} - ${p.rm.name}`,
+            tenant:p.rm.tenant, phone:p.rm.phone, month:curM, date:td, period:`${curM}-01 至 ${curM}-30`,
+            rent:p.rm.rent, deposit:0, extraFee:p.exSum,
+            lastW:p.prevW, curW:p.cw, useW:p.uw, waterPrice:p.wp, waterFee:p.wf,
+            lastE:p.prevE, curE:p.ce, useE:p.ue, elecPrice:p.ep, elecFee:p.ef,
+            total:formatMoney(p.totalNum), status:'unpaid'
+          });
+        });
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      saveLocalCache(); openModule('bills','ALL'); alert(`已批量生成 ${prepared.length} 份账单并记录水电抄表！`);
+    } catch(e) {
+      setSyncBadge('⚠️ 抄表保存失败', true);
+      alert('集中抄表保存失败：' + (e.message || '请检查权限'));
+    }
   }
 
   // --- 7. 退租结算 (对齐视频双向对冲：应退租客费用 vs 应收租客费用) ---
@@ -1117,17 +1823,40 @@
     renderCheckoutDetailUI(rId);
   }
 
-  function confirmCheckout(rId){
-    const r = db.rooms.find(x => x.id === rId);
+  async function confirmCheckout(rId){
+    if(!ensureWriteAccess()) return;
+    const r = db.rooms.find(x => x.id === rId); if(!r) return;
     const refSum = tempCoRefunds.reduce((s,x)=>s+x.amt, 0), chgSum = tempCoCharges.reduce((s,x)=>s+x.amt, 0);
-    db.pastTenants.unshift({
-      building:r.building, name:r.name, tenant:r.tenant, phone:r.phone,
-      checkoutDate:new Date().toISOString().slice(0,10),
-      settleNote:`应退¥${refSum} 应收¥${chgSum}`
-    });
-    r.status = 'vacant'; r.vacantSince = new Date().toISOString().slice(0,10);
-    delete r.tenant; delete r.phone; delete r.idCard; delete r.idAddr;
-    saveDB(); closeLv3(); openCheckoutHome(); alert('退租结算完成，房间已恢复为空房！');
+    const todayStr = new Date().toISOString().slice(0,10);
+    const settleNote = `应退¥${refSum} 应收¥${chgSum}`;
+    try {
+      setSyncBadge('🔄 退租结算中', true);
+      if(isCloudAuthenticated()){
+        if(r.contractId){
+          await sbRequest(`contracts?id=eq.${encodeURIComponent(r.contractId)}`, {
+            method: 'PATCH',
+            body: { status: 'checked_out', checkout_date: todayStr, settle_note: settleNote }
+          });
+        }
+        await sbRequest(`rooms?id=eq.${encodeURIComponent(r.id)}`, {
+          method: 'PATCH',
+          body: { status: 'vacant', vacant_since: todayStr, plan_checkout: null, updated_by: currentProfile?.id || null }
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      db.pastTenants.unshift({
+        building:r.building, name:r.name, tenant:r.tenant, phone:r.phone,
+        checkoutDate:todayStr, settleNote
+      });
+      r.status = 'vacant'; r.vacantSince = todayStr;
+      delete r.contractId; delete r.tenant; delete r.phone; delete r.idCard; delete r.idAddr;
+      saveLocalCache(); closeLv3(); openCheckoutHome(); alert('退租结算完成，房间已恢复为空房！');
+    } catch(e) {
+      setSyncBadge('⚠️ 退租失败', true);
+      alert('退租结算失败：' + (e.message || '无操作权限'));
+    }
   }
 
   // --- 8. 报修工单 ---
@@ -1139,20 +1868,75 @@
         <div class="r-tab ${repairTab==='done'?'active':''}" onclick="repairTab='done';renderRepairsPage()">已处理工单</div>
       </div>
       <div style="padding:12px 14px;"><button class="btn" onclick="addRepairItem()">+ 登记报修工单</button></div>
-      <div class="card-list">${db.repairs.filter(r=>r.status===repairTab).map((r,i) => `
+      <div class="card-list">${db.repairs.filter(r=>r.status===repairTab).map((r) => {
+        const origIdx = db.repairs.indexOf(r);
+        return `
         <div class="item-card">
           <div class="item-header"><span>[${r.type||'水电'}] ${r.roomName}</span><span class="badge ${r.status==='done'?'green':'orange'}">${r.status==='done'?'已处理':'未处理'}</span></div>
           <div class="item-row"><span>${r.desc}</span><span>${r.date}</span></div>
-          ${r.status==='pending'?`<div style="text-align:right;margin-top:8px;"><button class="btn-sm primary" onclick="r.status='done';saveDB();renderRepairsPage()">标记已处理</button></div>`:''}
-        </div>`).join('') || '<div class="empty-tip">暂无工单</div>'}</div>`;
+          ${r.status==='pending'?`<div style="text-align:right;margin-top:8px;"><button class="btn-sm primary" onclick="markRepairDone(${origIdx})">标记已处理</button></div>`:''}
+        </div>`;
+      }).join('') || '<div class="empty-tip">暂无工单</div>'}</div>`;
   }
 
-  function addRepairItem(){
-    const rm = prompt('请输入报修房间号 (如 5栋-101)：'); if(!rm) return;
+  async function addRepairItem(){
+    if(!ensureWriteAccess()) return;
+    const defaultRm = db.rooms[0] ? `${db.rooms[0].building}-${db.rooms[0].name}` : '';
+    const rmText = prompt('请输入报修房间号 (如 5栋-101)：', defaultRm); if(!rmText) return;
     const tp = prompt('报修类型 (水电/电器/门窗锁/墙壁地板/家具/网络)：','水电')||'水电';
     const desc = prompt('故障描述：'); if(!desc) return;
-    db.repairs.unshift({ roomName:rm, type:tp, desc, status:'pending', date:new Date().toISOString().slice(0,10) });
-    saveDB(); renderRepairsPage();
+    const td = new Date().toISOString().slice(0,10);
+    const matchedRoom = db.rooms.find(x => rmText.includes(x.building) && rmText.includes(x.name))
+      || db.rooms.find(x => rmText.includes(x.name));
+    const matchedBldg = matchedRoom
+      ? { id: matchedRoom.buildingId }
+      : (db.buildings || []).find(b => rmText.includes(b.name)) || (db.buildings || [])[0];
+    try {
+      setSyncBadge('🔄 登记报修中', true);
+      let repairId = 'RP_' + Date.now();
+      if(isCloudAuthenticated()){
+        const created = await sbRequest('repairs?select=*', {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: {
+            building_id: matchedBldg?.id || null,
+            room_id: matchedRoom?.id || null,
+            room_name: rmText, repair_type: tp, description: desc,
+            status: 'pending', report_date: td, created_by: currentProfile?.id || null
+          }
+        });
+        const row = Array.isArray(created) ? created[0] : created;
+        if(row && row.id) repairId = row.id;
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      db.repairs.unshift({ id: repairId, buildingId: matchedBldg?.id || null, roomId: matchedRoom?.id || null, roomName: rmText, type: tp, desc, status: 'pending', date: td });
+      saveLocalCache(); renderRepairsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('登记报修失败：' + (e.message || '请确保填写已分配楼栋的房间号'));
+    }
+  }
+
+  async function markRepairDone(idx){
+    if(!ensureWriteAccess()) return;
+    const rp = db.repairs[idx]; if(!rp) return;
+    try {
+      setSyncBadge('🔄 更新中', true);
+      if(isCloudAuthenticated() && rp.id){
+        await sbRequest(`repairs?id=eq.${encodeURIComponent(rp.id)}`, {
+          method: 'PATCH',
+          body: { status: 'done' }
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      }
+      rp.status = 'done';
+      saveLocalCache(); renderRepairsPage();
+    } catch(e) {
+      setSyncBadge('⚠️ 更新失败', true);
+      alert('更新工单状态失败：' + (e.message || '无操作权限'));
+    }
   }
 
   // --- 9. 统计与收支净利润 (填补原版空白) ---
@@ -1168,7 +1952,7 @@
         <div style="font-size:30px;font-weight:700;margin:8px 0;">¥ ${(inSum - outSum).toFixed(2)}</div>
         <div style="display:flex;justify-content:space-between;font-size:13px;"><span>累计实收：¥${inSum.toFixed(2)}</span><span>日常支出：-¥${outSum.toFixed(2)}</span></div>
       </div>
-      <button class="btn btn-outline" style="margin-bottom:14px;" onclick="addExpensePrompt()">+ 记一笔日常房屋支出 (维修/保洁/宽带)</button>
+      ${isBoss() ? `<button class="btn btn-outline" style="margin-bottom:14px;" onclick="addExpensePrompt()">+ 记一笔日常房屋支出 (维修/保洁/宽带)</button>` : ''}
       <div class="section-title">收支流水明细</div>
       <div class="cell-group" style="margin:0;">${(db.ledger||[]).slice(0,30).map(l=>`
         <div class="cell-row">
@@ -1177,37 +1961,80 @@
         </div>`).join('') || '<div class="empty-tip">暂无收支流水</div>'}</div>`;
   }
 
-  function addExpensePrompt(){
+  async function addExpensePrompt(){
+    if(!ensureWriteAccess()) return;
+    if(!isBoss()) return alert('仅主房东可登记日常支出！');
     const cat = prompt('请输入支出类型 (如：维修费、保洁费、物业宽带)：','维修费'); if(!cat) return;
-    const amt = Number(prompt(`请输入【${cat}】支出金额（元）：`,'100')||0); if(!amt) return;
+    const amt = parseNum(prompt(`请输入【${cat}】支出金额（元）：`,'100')); if(!amt || amt <= 0) return;
     const td = new Date().toISOString().slice(0,10);
-    db.expenses.unshift({ cat, amount:amt, date:td });
-    db.ledger.unshift({ type:'out', title:`[支出] ${cat}`, amount:amt, date:td });
-    saveDB();
+    try {
+      setSyncBadge('🔄 记账中', true);
+      if(isCloudAuthenticated()){
+        await sbRequest('ledger_entries', {
+          method: 'POST',
+          body: {
+            entry_type: 'out', category: cat, title: `[支出] ${cat}`,
+            amount: amt, entry_date: td, created_by: currentProfile?.id || null
+          }
+        });
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      db.expenses.unshift({ cat, amount:amt, date:td });
+      db.ledger.unshift({ type:'out', cat, title:`[支出] ${cat}`, amount:amt, date:td });
+      saveLocalCache();
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('记录支出失败：' + (e.message || '无操作权限'));
+    }
   }
 
-  // --- 10. 我的与管房组 ---
+  // --- 10. 我的、手机号登录校验、管房员楼栋分配与老数据迁移 ---
+  function getManagerBuildingNames(managerId){
+    const bldgMap = new Map((db.buildings || []).map(b => [b.id, b.name]));
+    return (db.assignments || [])
+      .filter(a => a.manager_id === managerId)
+      .map(a => bldgMap.get(a.building_id))
+      .filter(Boolean);
+  }
+
   function renderManagersSection(){
     const boss = isBoss();
     const { url, key } = getSupabaseConfig();
+    const cloudOn = !!(url && key);
+    const authed = isCloudAuthenticated() && !!currentProfile;
     const t = document.getElementById('cur-user-title'), p = document.getElementById('cur-user-phone');
-    if(t) t.innerText = boss ? '👑 主房东' : '👤 管房员';
-    if(p) p.innerText = currentPhone ? `当前手机号：${maskPhone(currentPhone)}` : '尚未绑定登录手机号（点击右侧设置）';
+    const logoutBtn = document.getElementById('logout-btn');
+    if(t){
+      if(cloudOn && !authed) t.innerText = '🔒 未登录（点击右侧登录）';
+      else t.innerText = boss ? '👑 主房东' : '👤 管房员';
+    }
+    if(p){
+      p.innerText = currentPhone ? `当前手机号：${maskPhone(currentPhone)}` : '尚未登录手机号（点击右侧登录）';
+    }
+    if(logoutBtn) logoutBtn.style.display = authed ? 'inline-block' : 'none';
 
     const adminPanel = document.getElementById('manager-admin-panel');
     if(adminPanel) adminPanel.style.display = boss ? 'block' : 'none';
     const backupSec = document.getElementById('backup-section');
     if(backupSec) backupSec.style.display = boss ? 'block' : 'none';
+    const migrationSec = document.getElementById('migration-section');
+    if(migrationSec) migrationSec.style.display = (boss && authed) ? 'block' : 'none';
     const cloudSec = document.getElementById('cloud-config-section');
-    if(cloudSec) cloudSec.style.display = (boss || !url || !key) ? 'block' : 'none';
+    if(cloudSec) cloudSec.style.display = (boss || !cloudOn || !authed) ? 'block' : 'none';
 
     const cfgStatus = document.getElementById('cloud-config-status');
     const urlInput = document.getElementById('cfg-sp-url');
     if(cfgStatus){
-      cfgStatus.innerText = (url && key)
-        ? `状态：已配置本机云端连接（密钥已加密隐藏，不随源码公开）`
-        : '状态：未配置（当前仅保存在本机浏览器）';
-      cfgStatus.style.color = (url && key) ? 'var(--success)' : 'var(--warn)';
+      if(cloudOn){
+        const keyMode = key.startsWith('sb_publishable_') ? '新版 sb_publishable_ 可发布密钥' : '兼容型 JWT 密钥';
+        cfgStatus.innerText = `状态：已配置本机云端连接（${keyMode}，密钥不随源码公开）`;
+        cfgStatus.style.color = 'var(--success)';
+      } else {
+        cfgStatus.innerText = '状态：未配置（当前仅保存在本机浏览器）';
+        cfgStatus.style.color = 'var(--warn)';
+      }
     }
     if(urlInput && document.activeElement !== urlInput && !urlInput.value && url){
       urlInput.value = url;
@@ -1215,9 +2042,204 @@
 
     const chk = document.getElementById('restrict-mgr-chk'); if(chk) chk.checked = !!db.restrictMgr;
     const box = document.getElementById('managers-list-box'); if(!box) return;
-    const adminDisplay = boss ? (db.adminPhone || '未绑定') : maskPhone(db.adminPhone);
-    box.innerHTML = `<div class="cell-row"><span>主房东 (${adminDisplay})</span><span class="badge blue">创建者</span></div>` +
-      (db.managers||[]).map((m,i) => `<div class="cell-row"><span>${m.name} (${boss ? m.phone : maskPhone(m.phone)})</span>${boss?`<button class="btn-sm danger" onclick="removeManager(${i})">移除</button>`:'<span class="badge">管房员</span>'}</div>`).join('');
+
+    if(cloudOn && !authed){
+      box.innerHTML = `<div class="empty-tip" style="padding:16px 0;">请先使用手机号与安全口令登录，登录态由数据库 RLS 实时校验权限。</div>`;
+      return;
+    }
+
+    if(!boss){
+      const myBldgs = (db.buildings || []).map(b => b.name);
+      box.innerHTML = `
+        <div class="cell-row"><span>我的角色</span><span class="badge blue">管房员（RLS 隔离）</span></div>
+        <div class="cell-row"><span>已分配楼栋</span><span style="color:var(--primary);font-weight:600;">${myBldgs.length ? myBldgs.join('、') : '暂未分配楼栋'}</span></div>`;
+      return;
+    }
+
+    const adminDisplay = db.adminPhone || currentPhone || '未绑定';
+    box.innerHTML = `<div class="cell-row"><span>主房东 (${adminDisplay})</span><span class="badge blue">全局权限</span></div>` +
+      (db.managers||[]).map((m,i) => {
+        const bNames = m.id ? getManagerBuildingNames(m.id) : [];
+        return `<div class="cell-row" style="flex-direction:column;align-items:stretch;gap:6px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span><strong>${m.name}</strong> (${m.phone})</span>
+            <div>
+              ${m.id ? `<button class="btn-sm primary" onclick="openAssignBuildingsSheet('${m.id}')">🏢 分配楼栋</button>` : ''}
+              <button class="btn-sm danger" onclick="removeManager(${i})">移除</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--sub);">已分配楼栋：${bNames.length ? bNames.join('、') : '暂未分配（无法查看任何房源）'}</div>
+        </div>`;
+      }).join('');
+  }
+
+  function openLoginSheet(){
+    const cloudOn = isCloudConfigured();
+    document.getElementById('action-sheet').classList.add('show');
+    document.getElementById('action-title-text').innerText = cloudOn ? '手机号安全登录（RLS 身份校验）' : '绑定本机手机号';
+    document.getElementById('action-body').innerHTML = `
+      <div style="font-size:12px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
+        ${cloudOn
+          ? '请输入您的手机号和 4 位以上安全口令（PIN）。首次初始化主房东或管房员首次登录时，将自动为您绑定所填安全口令。'
+          : '当前为纯本地模式，输入手机号即可绑定账号。如需多端同步与 RLS 权限隔离，请先配置 Supabase 连接。'}
+      </div>
+      <div class="cell-group" style="margin:0 0 12px;">
+        <div class="cell-row"><span class="cell-label">手机号<span class="req">*</span></span><input id="login-phone" type="tel" class="cell-input" placeholder="请输入手机号" value="${currentPhone || ''}"></div>
+        ${cloudOn ? `<div class="cell-row"><span class="cell-label">安全口令<span class="req">*</span></span><input id="login-pin" type="password" class="cell-input" placeholder="至少4位数字或字母"></div>` : ''}
+      </div>
+      <button class="btn" onclick="submitLoginPhone()">${cloudOn ? '验证并登录' : '保存手机号'}</button>`;
+  }
+
+  async function submitLoginPhone(){
+    const ph = (document.getElementById('login-phone')?.value || '').trim().replace(/\s+/g, '');
+    if(!ph || ph.length < 5) return alert('请输入有效的手机号！');
+    if(!isCloudConfigured()){
+      currentPhone = ph;
+      localStorage.setItem(LOGIN_KEY, currentPhone);
+      if(!db.adminPhone && confirm('是否将该手机号设为本地主房东账号？')){
+        db.adminPhone = currentPhone;
+      }
+      saveLocalCache(); closeAction(); return;
+    }
+    const pin = (document.getElementById('login-pin')?.value || '').trim();
+    if(pin.length < 4) return alert('请输入至少 4 位安全口令（PIN）！');
+    try {
+      setSyncBadge('🔄 校验身份中', true);
+      const res = await sbRpc('gfb_login_phone', { p_phone: ph, p_pin: pin });
+      if(!res || !res.ok){
+        setSyncBadge('🔒 登录失败', true);
+        return alert((res && res.message) || '登录失败，请检查手机号与安全口令！');
+      }
+      localStorage.setItem(SESSION_TOKEN_KEY, res.session_token);
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(res.profile));
+      localStorage.setItem(LOGIN_KEY, res.profile.phone || ph);
+      currentProfile = res.profile;
+      currentPhone = res.profile.phone || ph;
+      closeAction();
+      if(res.is_bootstrap){
+        alert('主房东账号初始化成功！若之前在旧版有数据，可点击下方【一键迁移云端/本机老数据】无损导入新表。');
+      }
+      await syncFromCloud(false);
+    } catch(e) {
+      setSyncBadge('⚠️ 登录异常', true);
+      alert('登录失败：' + (e.message || '请确认已在 Supabase 执行 phase2_schema_rls.sql'));
+    }
+  }
+
+  async function logoutSession(){
+    if(!confirm('确定退出当前登录账号吗？退出后将清除本机登录态与缓存数据。')) return;
+    try {
+      if(isCloudAuthenticated()){
+        await sbRpc('gfb_logout', {});
+      }
+    } catch(_) {}
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(PROFILE_KEY);
+    currentProfile = null;
+    db = createEmptyDB();
+    localStorage.removeItem(STORAGE_KEY);
+    setSyncBadge('🔒 未登录', true);
+    refreshDashboard();
+  }
+
+  function openAssignBuildingsSheet(managerId){
+    if(!isBoss()) return alert('仅主房东可分配楼栋权限！');
+    const mgr = (db.managers || []).find(m => m.id === managerId);
+    if(!mgr) return;
+    const allBldgs = db.buildings || [];
+    if(!allBldgs.length) return alert('当前还没有楼栋，请先在“工作台 -> 我的房源”添加楼栋或迁移老数据！');
+    const assignedIds = new Set((db.assignments || []).filter(a => a.manager_id === managerId).map(a => a.building_id));
+    document.getElementById('action-sheet').classList.add('show');
+    document.getElementById('action-title-text').innerText = `为【${mgr.name}】分配楼栋`;
+    document.getElementById('action-body').innerHTML = `
+      <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">勾选该管房员可管理的楼栋；未勾选的楼栋将由数据库 RLS 彻底拦截，管房员无法查看或修改。</div>
+      <div class="cell-group" style="margin:0 0 14px;">
+        ${allBldgs.map(b => `
+          <label class="cell-row" style="cursor:pointer;">
+            <span>🏢 ${b.name}</span>
+            <input type="checkbox" class="assign-bldg-chk" value="${b.id}" ${assignedIds.has(b.id) ? 'checked' : ''} style="width:18px;height:18px;">
+          </label>`).join('')}
+      </div>
+      <button class="btn" onclick="saveManagerAssignments('${managerId}')">保存楼栋分配</button>`;
+  }
+
+  async function saveManagerAssignments(managerId){
+    if(!isBoss() || !ensureWriteAccess()) return;
+    const checked = Array.from(document.querySelectorAll('.assign-bldg-chk:checked')).map(el => el.value);
+    const prevIds = (db.assignments || []).filter(a => a.manager_id === managerId).map(a => a.building_id);
+    const toAdd = checked.filter(id => !prevIds.includes(id));
+    const toRemove = prevIds.filter(id => !checked.includes(id));
+    try {
+      setSyncBadge('🔄 保存分配中', true);
+      if(isCloudAuthenticated()){
+        for(const bId of toRemove){
+          await sbRequest(`manager_assignments?manager_id=eq.${encodeURIComponent(managerId)}&building_id=eq.${encodeURIComponent(bId)}`, {
+            method: 'DELETE'
+          });
+        }
+        if(toAdd.length > 0){
+          await sbRequest('manager_assignments?on_conflict=manager_id,building_id', {
+            method: 'POST',
+            headers: { 'Prefer': 'resolution=ignore-duplicates' },
+            body: toAdd.map(bId => ({
+              manager_id: managerId, building_id: bId, assigned_by: currentProfile?.id || null
+            }))
+          });
+        }
+        const latest = await sbRequest('manager_assignments?select=*');
+        db.assignments = Array.isArray(latest) ? latest : [];
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        db.assignments = (db.assignments || []).filter(a => a.manager_id !== managerId)
+          .concat(checked.map(bId => ({ manager_id: managerId, building_id: bId })));
+      }
+      saveLocalCache(); closeAction(); alert('管房员楼栋权限分配已生效！');
+    } catch(e) {
+      setSyncBadge('⚠️ 保存失败', true);
+      alert('保存楼栋分配失败：' + (e.message || '无操作权限'));
+    }
+  }
+
+  async function migrateLegacyData(){
+    if(!isBoss() || !ensureWriteAccess()) return alert('仅已登录的主房东可执行老数据迁移！');
+    if(!confirm('即将尝试把旧版云端 store 表或本机缓存中的房源、租约与账单无损迁移至新多表结构（重复执行不会产生重复数据）。确认开始吗？')) return;
+    try {
+      setSyncBadge('🔄 正在迁移老数据', true);
+      let result = await sbRpc('gfb_migrate_from_store_table', {});
+      if(!result || !result.ok){
+        const localRaw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        if(localRaw && ((localRaw.rooms && localRaw.rooms.length) || (localRaw.bills && localRaw.bills.length))){
+          result = await sbRpc('gfb_migrate_legacy_json', { p_payload: localRaw });
+        } else {
+          setSyncBadge('☁️ 多表已同步', false);
+          return alert((result && result.message) || '未在旧云端 store 表或本机缓存发现老数据；若您有导出的 .json 备份文件，请点击下方按钮导入。');
+        }
+      }
+      await syncFromCloud(false);
+      alert(`老数据迁移完成！\n楼栋：${result.buildings} 栋\n房间：${result.rooms} 间\n租约：${result.contracts} 份\n账单：${result.bills} 条\n抄表记录：${result.meter_readings} 条\n管房员：${result.managers} 人`);
+    } catch(e) {
+      setSyncBadge('⚠️ 迁移失败', true);
+      alert('老数据迁移失败：' + (e.message || '请确认已执行 phase2_schema_rls.sql'));
+    }
+  }
+
+  function importAndMigrateBackup(e){
+    if(!isBoss() || !ensureWriteAccess()) return alert('仅主房东可导入老备份数据！');
+    const f = e.target.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = async ev => {
+      try {
+        const payload = JSON.parse(ev.target.result);
+        setSyncBadge('🔄 迁移导入中', true);
+        const result = await sbRpc('gfb_migrate_legacy_json', { p_payload: payload });
+        await syncFromCloud(false);
+        alert(`备份文件无损迁移完成！\n楼栋：${result.buildings} 栋\n房间：${result.rooms} 间\n租约：${result.contracts} 份\n账单：${result.bills} 条\n抄表记录：${result.meter_readings} 条`);
+      } catch(x) {
+        setSyncBadge('⚠️ 导入失败', true);
+        alert('备份导入失败：' + (x.message || 'JSON 文件格式有误'));
+      }
+    };
+    rd.readAsText(f);
   }
 
   function saveCloudConfig(){
@@ -1228,17 +2250,26 @@
     const oldKey = (localStorage.getItem(SP_ANON_KEY) || '').trim();
     const finalKey = newKey || oldKey;
     if(!/^https?:\/\//i.test(url)) return alert('请输入有效的 Supabase URL（以 https:// 开头）！');
-    if(!finalKey) return alert('请输入 Supabase Anon Key！');
+    if(!finalKey) return alert('请输入 Supabase 可发布密钥（sb_publishable_... 或 anon Key）！');
     localStorage.setItem(SP_URL_KEY, url);
     localStorage.setItem(SP_ANON_KEY, finalKey);
     if(keyEl) keyEl.value = '';
-    syncFromCloud(true);
+    if(!isCloudAuthenticated()){
+      refreshDashboard();
+      alert('云端连接配置已保存到本机！接下来请使用手机号与安全口令登录。');
+      openLoginSheet();
+    } else {
+      syncFromCloud(true);
+    }
   }
 
   function clearCloudConfig(){
-    if(!confirm('确定清除本机保存的 Supabase 云端连接密钥吗？清除后将切换为仅本地保存模式。')) return;
+    if(!confirm('确定清除本机保存的 Supabase 云端连接密钥与登录态吗？清除后将切换为仅本地保存模式。')) return;
     localStorage.removeItem(SP_URL_KEY);
     localStorage.removeItem(SP_ANON_KEY);
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(PROFILE_KEY);
+    currentProfile = null;
     const urlEl = document.getElementById('cfg-sp-url');
     const keyEl = document.getElementById('cfg-sp-key');
     if(urlEl) urlEl.value = '';
@@ -1248,38 +2279,74 @@
   }
 
   function switchAccountPrompt(){
-    const p = prompt('请输入登录手机号：', currentPhone);
-    if(p === null) return;
-    const trimmed = p.trim();
-    if(!trimmed) return;
-    currentPhone = trimmed;
-    localStorage.setItem(LOGIN_KEY, currentPhone);
-    if(!db.adminPhone && confirm('当前尚未绑定主房东手机号，是否将该手机号设为“主房东”账号？')){
-      db.adminPhone = currentPhone;
-      saveDB();
-    } else {
-      refreshDashboard();
+    openLoginSheet();
+  }
+
+  async function toggleMgrRestrict(val){
+    if(!ensureWriteAccess()) return;
+    if(!isBoss()) return alert('仅主房东可修改管家权限！');
+    try {
+      if(isCloudAuthenticated() && currentProfile?.id){
+        await sbRequest(`profiles?id=eq.${encodeURIComponent(currentProfile.id)}&select=${PROFILE_COLS}`, {
+          method: 'PATCH',
+          body: { restrict_manager: !!val }
+        });
+        currentProfile.restrict_manager = !!val;
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(currentProfile));
+      }
+      db.restrictMgr = !!val;
+      saveLocalCache();
+    } catch(e) {
+      alert('更新权限开关失败：' + (e.message || '无操作权限'));
     }
   }
 
-  function toggleMgrRestrict(val){
-    if(!isBoss()) return alert('仅主房东可修改管家权限！');
-    db.restrictMgr = val; saveDB();
-  }
-
-  function addManager(){
+  async function addManager(){
+    if(!ensureWriteAccess()) return;
     if(!isBoss()) return alert('仅主房东可添加管房员！');
-    const n = document.getElementById('m-name').value.trim()||'管家', p = document.getElementById('m-phone').value.trim();
+    const n = document.getElementById('m-name').value.trim()||'管房员';
+    const p = document.getElementById('m-phone').value.trim().replace(/\s+/g, '');
     if(!p) return alert('请输入管家手机号！');
-    db.managers.push({ name:n, phone:p });
-    document.getElementById('m-name').value = ''; document.getElementById('m-phone').value = '';
-    saveDB(); alert('已添加管房员：'+n);
+    try {
+      setSyncBadge('🔄 添加管房员中', true);
+      let mgrObj = { id: 'MGR_' + Date.now(), name: n, phone: p };
+      if(isCloudAuthenticated()){
+        const created = await sbRequest(`profiles?select=${PROFILE_COLS}`, {
+          method: 'POST',
+          headers: { 'Prefer': 'return=representation' },
+          body: { phone: p, display_name: n, role: 'manager', is_active: true }
+        });
+        const row = Array.isArray(created) ? created[0] : created;
+        if(row) mgrObj = { id: row.id, name: row.display_name || n, phone: row.phone };
+        setSyncBadge('☁️ 多表已同步', false);
+      } else {
+        setSyncBadge('💾 仅本地保存', true);
+      }
+      db.managers.push(mgrObj);
+      document.getElementById('m-name').value = ''; document.getElementById('m-phone').value = '';
+      saveLocalCache();
+      alert(`已添加管房员【${n}】！请点击右侧“🏢 分配楼栋”为其指定负责的楼栋，对方首次登录时可自行设置 4 位以上安全口令。`);
+    } catch(e) {
+      setSyncBadge('⚠️ 添加失败', true);
+      alert('添加管房员失败：' + (e.message || '该手机号可能已存在'));
+    }
   }
 
-  function removeManager(idx){
+  async function removeManager(idx){
+    if(!ensureWriteAccess()) return;
     if(!isBoss()) return alert('仅主房东可移除管房员！');
-    db.managers.splice(idx, 1);
-    saveDB();
+    const m = db.managers[idx]; if(!m) return;
+    if(!confirm(`确定移除管房员【${m.name}】吗？移除后其登录权限及楼栋分配将立即撤销。`)) return;
+    try {
+      if(isCloudAuthenticated() && m.id){
+        await sbRequest(`profiles?id=eq.${encodeURIComponent(m.id)}`, { method: 'DELETE' });
+        db.assignments = (db.assignments || []).filter(a => a.manager_id !== m.id);
+      }
+      db.managers.splice(idx, 1);
+      saveLocalCache();
+    } catch(e) {
+      alert('移除管房员失败：' + (e.message || '无操作权限'));
+    }
   }
 
   function switchTab(tab, el){
@@ -1298,9 +2365,12 @@
 
   function importData(e){
     if(!isBoss()) return alert('仅主房东可恢复数据备份！');
+    if(isCloudAuthenticated()){
+      return importAndMigrateBackup(e);
+    }
     const f = e.target.files[0]; if(!f) return;
     const rd = new FileReader();
-    rd.onload = ev => { try{ db = Object.assign(db, JSON.parse(ev.target.result)); saveDB(); alert('数据恢复成功！'); }catch(x){ alert('文件格式有误'); } };
+    rd.onload = ev => { try{ db = Object.assign(createEmptyDB(), JSON.parse(ev.target.result)); saveLocalCache(); alert('本地数据恢复成功！'); }catch(x){ alert('文件格式有误'); } };
     rd.readAsText(f);
   }
 
